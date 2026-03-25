@@ -7,7 +7,7 @@ async function list(req, res) {
     return res.status(200).json(Util.getSuccessResponse(list));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
-  }
+  } 
 }
 
 async function getById(req, res) {
