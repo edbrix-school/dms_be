@@ -91,6 +91,18 @@ const options = {
             updated_at: { type: "string", format: "date-time", nullable: true },
           },
         },
+        DocumentFile: {
+          type: "object",
+          properties: {
+            document_file_id: { type: "integer" },
+            file_name: { type: "string" },
+            file_type: { type: "string", description: "File extension" },
+            media_type: { type: "string", enum: ["image", "video", "audio", "document", "other"] },
+            asset_type: { type: "string", nullable: true },
+            file_size: { type: "integer", format: "int64", nullable: true, description: "Bytes" },
+            file_id: { type: "string" },
+          },
+        },
         Document: {
           type: "object",
           properties: {
@@ -99,9 +111,10 @@ const options = {
             description: { type: "string", nullable: true },
             tags: { type: "string", nullable: true },
             category_id: { type: "integer", nullable: true },
+            distribution: { type: "string", nullable: true, description: "Team / distribution channel" },
             created_by: { type: "integer" },
             created_at: { type: "string", format: "date-time" },
-            document_files: { type: "array", items: { type: "object" } },
+            documentFiles: { type: "array", items: { $ref: "#/components/schemas/DocumentFile" } },
           },
         },
         DocumentListResult: {
@@ -113,13 +126,54 @@ const options = {
             limit: { type: "integer" },
           },
         },
-        SearchRequest: {
+        DocumentStatsBucket: {
           type: "object",
           properties: {
-            search_text: { type: "string" },
+            count: { type: "integer" },
+            size_bytes: { type: "string", description: "Total size in bytes (string for large values)" },
+            size_gb: { type: "number", description: "Total size in gigabytes (binary GB)" },
+          },
+        },
+        DocumentStatsSummary: {
+          type: "object",
+          properties: {
+            total_assets: { $ref: "#/components/schemas/DocumentStatsBucket" },
+            images: { $ref: "#/components/schemas/DocumentStatsBucket" },
+            pdfs: { $ref: "#/components/schemas/DocumentStatsBucket" },
+            other_files: { $ref: "#/components/schemas/DocumentStatsBucket" },
+          },
+        },
+        DistributionTypeStat: {
+          type: "object",
+          properties: {
+            distribution: { type: "string" },
+            type: { type: "string", description: "File media_type (image, video, document, unknown, …)" },
+            file_count: { type: "integer" },
+            total_size_bytes: { type: "string" },
+            total_size_gb: { type: "number" },
+          },
+        },
+        SearchRequest: {
+          type: "object",
+          description:
+            "Combine any filters (AND). With search_text, Alfresco hits are intersected with DB filters. You may nest the same keys under search_fields.",
+          properties: {
+            search_text: { type: "string", description: "Full-text via Alfresco (optional)" },
+            title: { type: "string", description: "Partial match on document title" },
+            description: { type: "string" },
+            tags: { type: "string" },
+            distribution: { type: "string", description: "Partial match on team / distribution" },
             category_id: { type: "integer", nullable: true },
+            created_by: { type: "integer", nullable: true },
+            media_type: { type: "string", enum: ["image", "video", "audio", "document", "other"] },
+            asset_type: { type: "string", description: "Partial match on file asset_type" },
             page: { type: "integer", default: 1 },
             limit: { type: "integer", default: 20 },
+            search_fields: {
+              type: "object",
+              description: "Alternative: same keys as above nested in one object",
+              additionalProperties: true,
+            },
           },
         },
       },
@@ -376,7 +430,8 @@ const options = {
         post: {
           tags: ["Documents"],
           summary: "Create document",
-          description: "Create document with optional file uploads. Multipart: title (required), files (max 10), cover_image (optional), description, tags, category_id.",
+          description:
+            "Multipart: title (required), files (max 10), cover_image (optional). distribution = uploading team. Per file: media_type inferred from MIME/extension, or override with file_media_types JSON array. asset_type: single asset_type or JSON file_asset_types array aligned with files order.",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -390,6 +445,10 @@ const options = {
                     description: { type: "string" },
                     tags: { type: "string" },
                     category_id: { type: "integer" },
+                    distribution: { type: "string", description: "Team / distribution" },
+                    asset_type: { type: "string", description: "Default asset type for all uploaded files" },
+                    file_asset_types: { type: "string", description: 'JSON array, e.g. ["Brochure","Video"] per file order' },
+                    file_media_types: { type: "string", description: 'JSON array overriding media_type per file: image|video|audio|document|other' },
                     files: { type: "array", items: { type: "string", format: "binary" } },
                     cover_image: { type: "string", format: "binary" },
                   },
@@ -409,7 +468,8 @@ const options = {
         post: {
           tags: ["Documents"],
           summary: "Search documents",
-          description: "Full-text search with optional category filter.",
+          description:
+            "Filter by multiple DB fields (AND). Optional search_text queries Alfresco; results are intersected with DB filters. Empty body lists by category_id only if provided, else all (paginated).",
           security: [{ bearerAuth: [] }],
           requestBody: {
             content: {
@@ -420,6 +480,38 @@ const options = {
           },
           responses: {
             200: { description: "Search results", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/documents/stats/summary": {
+        get: {
+          tags: ["Documents"],
+          summary: "File statistics summary",
+          description:
+            "Counts and total sizes (bytes + GB) for all files, images (media_type or image extensions), PDFs (extension pdf), and all other files. Mutually exclusive buckets.",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Aggregated stats",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } },
+            },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/documents/stats/by-distribution": {
+        get: {
+          tags: ["Documents"],
+          summary: "Files by distribution and type",
+          description:
+            "Per document `distribution` (team) and per-file `media_type`, returns file count and total size. Empty distribution shown as (Unassigned); missing media_type as unknown.",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Array of breakdown rows in data",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } },
+            },
             401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -452,6 +544,7 @@ const options = {
                     description: { type: "string" },
                     tags: { type: "string" },
                     category_id: { type: "integer", nullable: true },
+                    distribution: { type: "string", nullable: true },
                   },
                 },
               },

@@ -21,6 +21,22 @@ const DocumentFile = db.sequelize.define(
     file_type: {
       type: DataTypes.STRING,
       allowNull: true,
+      comment: "File extension",
+    },
+    media_type: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+      comment: "image | video | audio | document | other",
+    },
+    asset_type: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: "Business asset classification",
+    },
+    file_size: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+      comment: "Size in bytes",
     },
     file_id: {
       type: DataTypes.STRING,

@@ -42,10 +42,10 @@ async function uploadFile(file, metadata = {}) {
       maxBodyLength: Infinity,
     });
     console.log(response);
+    return response.data.entry;
   } catch (error) {
     console.log(error);
   }
-  return response.data.entry;
 }
 
 /**
