@@ -13,12 +13,12 @@ router.post(
   verifyAuth,
   upload.fields([{ name: "files", maxCount: 10 }, { name: "cover_image", maxCount: 1 }]),
   async (req, res) => {
-  const errors = Util.validate_prams(req.body, { title: "ANY" }, { title: "Title" });
-  if (Object.keys(errors).length > 0) {
-    return res.status(422).json(Util.getErrorResponse(errors));
-  }
-  const userId = req.user.user_id;
-  req.body.created_by = userId;
+    const errors = Util.validate_prams(req.body, { title: "ANY" }, { title: "Title" });
+    if (Object.keys(errors).length > 0) {
+      return res.status(422).json(Util.getErrorResponse(errors));
+    }
+    const userId = req?.user?.user_id;
+    req.body.created_by = userId;
     try {
       const document = await documentService.createDocument(req, req.body, userId);
       return res.status(200).json(Util.getSuccessResponse(document, "Document created."));
@@ -44,6 +44,33 @@ router.get("/", verifyAuth, async (req, res) => {
   }
 });
 
+router.get("/stats/summary", verifyAuth, async (req, res) => {
+  try {
+    const data = await documentService.getFileStatsSummary();
+    return res.status(200).json(Util.getSuccessResponse(data));
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/stats/by-distribution", verifyAuth, async (req, res) => {
+  try {
+    const data = await documentService.getFilesByDistributionAndType();
+    return res.status(200).json(Util.getSuccessResponse(data));
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.post("/search", verifyAuth, async (req, res) => {
+  try {
+    const result = await documentService.searchDocuments(req.body, req.user);
+    return res.status(200).json(Util.getSuccessResponse(result));
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 router.get("/:id", verifyAuth, async (req, res) => {
   try {
     const document = await documentService.getDocumentById(req.params.id);
@@ -61,15 +88,6 @@ router.get("/:id/files/:fileId/content", verifyAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
     res.setHeader("Content-Type", "application/octet-stream");
     return res.send(result.buffer);
-  } catch (err) {
-    return res.status(400).json({ success: false, message: err.message });
-  }
-});
-
-router.post("/search", verifyAuth, async (req, res) => {
-  try {
-    const result = await documentService.searchDocuments(req.body, req.user);
-    return res.status(200).json(Util.getSuccessResponse(result));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
   }

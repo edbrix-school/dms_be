@@ -1,8 +1,51 @@
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 const Document = require("../models/document");
 const DocumentFile = require("../models/documentFile");
 const User = require("../models/user");
 const Category = require("../models/category");
+
+const IS_IMAGE_SQL = `(
+  media_type = 'image'
+  OR LOWER(TRIM(COALESCE(file_type, ''))) IN ('jpg','jpeg','png','gif','webp','svg','bmp','heic','ico')
+)`;
+const IS_PDF_SQL = `LOWER(TRIM(COALESCE(file_type, ''))) = 'pdf'`;
+
+const FILE_STATS_SUMMARY_SQL = `
+SELECT
+  COUNT(*)::int AS total_count,
+  COALESCE(SUM(file_size), 0)::text AS total_bytes,
+  COUNT(*) FILTER (WHERE ${IS_IMAGE_SQL})::int AS image_count,
+  COALESCE(SUM(file_size) FILTER (WHERE ${IS_IMAGE_SQL}), 0)::text AS image_bytes,
+  COUNT(*) FILTER (WHERE ${IS_PDF_SQL})::int AS pdf_count,
+  COALESCE(SUM(file_size) FILTER (WHERE ${IS_PDF_SQL}), 0)::text AS pdf_bytes,
+  COUNT(*) FILTER (WHERE NOT (${IS_IMAGE_SQL}) AND NOT (${IS_PDF_SQL}))::int AS other_count,
+  COALESCE(SUM(file_size) FILTER (WHERE NOT (${IS_IMAGE_SQL}) AND NOT (${IS_PDF_SQL})), 0)::text AS other_bytes
+FROM dms_document_files
+`;
+
+const FILES_BY_DISTRIBUTION_TYPE_SQL = `
+SELECT
+  COALESCE(NULLIF(TRIM(d.distribution), ''), '(Unassigned)') AS distribution,
+  COALESCE(NULLIF(TRIM(df.media_type), ''), 'unknown') AS media_type,
+  COUNT(*)::int AS file_count,
+  COALESCE(SUM(df.file_size), 0)::text AS total_bytes
+FROM dms_document_files df
+INNER JOIN dms_documents d ON d.document_id = df.document_id
+GROUP BY 1, 2
+ORDER BY distribution ASC, media_type ASC
+`;
+
+const FILE_LIST_ATTRS = [
+  "document_file_id",
+  "document_id",
+  "file_name",
+  "file_type",
+  "media_type",
+  "asset_type",
+  "file_size",
+  "file_id",
+  "created_at",
+];
 
 async function createDocument(data) {
   const doc = await Document.create({
@@ -13,6 +56,7 @@ async function createDocument(data) {
     created_by: data.created_by,
     updated_by: data.updated_by || null,
     cover_image: data.cover_image || null,
+    distribution: data.distribution != null && String(data.distribution).trim() !== "" ? String(data.distribution).trim() : null,
   });
   return doc.toJSON();
 }
@@ -22,6 +66,9 @@ async function createDocumentFile(data) {
     document_id: data.document_id,
     file_name: data.file_name,
     file_type: data.file_type || null,
+    media_type: data.media_type || null,
+    asset_type: data.asset_type != null && String(data.asset_type).trim() !== "" ? String(data.asset_type).trim() : null,
+    file_size: data.file_size != null ? data.file_size : null,
     file_id: data.file_id,
     folder_id: data.folder_id || null,
     is_private:
@@ -39,7 +86,7 @@ async function getById(id, options = {}) {
     { model: Category, as: "category", attributes: ["category_id", "name"] },
   ];
   if (options.includeFiles !== false) {
-    include.push({ model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "document_id", "file_name", "file_type", "file_id", "created_at"] });
+    include.push({ model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS });
   }
   const doc = await Document.findByPk(id, {
     include,
@@ -57,7 +104,7 @@ async function list(filters = {}) {
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
       { model: Category, as: "category", attributes: ["category_id", "name"] },
-      { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type"] },
+      { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type", "media_type", "asset_type", "file_size"] },
     ],
     limit: Math.min(limit, 100),
     offset: (page - 1) * limit,
@@ -94,7 +141,7 @@ async function getByAlfrescoIds(alfrescoIds, filters = {}) {
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
       { model: Category, as: "category", attributes: ["category_id", "name"] },
-      { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type", "file_id"] },
+      { model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS },
     ],
   });
   if (filters.category_id != null) {
@@ -108,17 +155,104 @@ async function listAllWithoutSearch(filters = {}) {
   return list(filters);
 }
 
+async function getDocumentIdsByAlfrescoFileIds(alfrescoIds) {
+  if (!alfrescoIds || alfrescoIds.length === 0) return [];
+  const rows = await DocumentFile.findAll({
+    attributes: ["document_id"],
+    where: { file_id: { [Op.in]: alfrescoIds } },
+    group: ["document_id"],
+    raw: true,
+  });
+  return rows.map((r) => r.document_id);
+}
+
+function trimOrEmpty(v) {
+  if (v === undefined || v === null) return "";
+  return String(v).trim();
+}
+
+async function searchDocuments(filters = {}) {
+  const {
+    page = 1,
+    limit = 20,
+    category_id,
+    created_by,
+    title,
+    description,
+    tags,
+    distribution,
+    media_type,
+    asset_type,
+    document_id_in,
+  } = filters;
+
+  const whereDoc = {};
+  if (category_id != null && category_id !== "") whereDoc.category_id = category_id;
+  if (created_by != null && created_by !== "") whereDoc.created_by = created_by;
+  if (document_id_in && document_id_in.length > 0) {
+    whereDoc.document_id = { [Op.in]: document_id_in };
+  } else if (document_id_in && document_id_in.length === 0) {
+    return { rows: [], count: 0 };
+  }
+
+  const addILike = (field, val) => {
+    const t = trimOrEmpty(val);
+    if (t) whereDoc[field] = { [Op.iLike]: `%${t}%` };
+  };
+  addILike("title", title);
+  addILike("description", description);
+  addILike("tags", tags);
+  addILike("distribution", distribution);
+
+  const fileWhere = {};
+  const mt = trimOrEmpty(media_type);
+  const at = trimOrEmpty(asset_type);
+  if (mt) fileWhere.media_type = mt;
+  if (at) fileWhere.asset_type = { [Op.iLike]: `%${at}%` };
+  const hasFileFilter = Object.keys(fileWhere).length > 0;
+
+  const fileInclude = {
+    model: DocumentFile,
+    as: "documentFiles",
+    attributes: FILE_LIST_ATTRS,
+    ...(hasFileFilter ? { where: fileWhere, required: true } : {}),
+  };
+
+  const perPage = Math.min(Number(limit) || 20, 100);
+  const pg = Math.max(Number(page) || 1, 1);
+
+  const { rows, count } = await Document.findAndCountAll({
+    where: whereDoc,
+    distinct: true,
+    col: Document.primaryKeyAttribute || "document_id",
+    include: [
+      { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name"] },
+      fileInclude,
+    ],
+    limit: perPage,
+    offset: (pg - 1) * perPage,
+    order: [["created_at", "DESC"]],
+  });
+
+  return { rows: rows.map((r) => r.toJSON()), count };
+}
+
 async function updateDocument(id, data) {
-  await Document.update(
-    {
-      title: data.title,
-      description: data.description,
-      tags: data.tags,
-      category_id: data.category_id,
-      updated_by: data.updated_by,
-    },
-    { where: { document_id: id } }
-  );
+  const patch = {
+    title: data.title,
+    description: data.description,
+    tags: data.tags,
+    category_id: data.category_id,
+    updated_by: data.updated_by,
+  };
+  if (data.distribution !== undefined) {
+    patch.distribution =
+      data.distribution != null && String(data.distribution).trim() !== ""
+        ? String(data.distribution).trim()
+        : null;
+  }
+  await Document.update(patch, { where: { document_id: id } });
   return getById(id);
 }
 
@@ -136,6 +270,17 @@ async function deleteDocument(id) {
   return true;
 }
 
+async function getFileStatsSummaryRaw() {
+  const sequelize = Document.sequelize;
+  const [row] = await sequelize.query(FILE_STATS_SUMMARY_SQL, { type: QueryTypes.SELECT });
+  return row || {};
+}
+
+async function getFilesByDistributionAndTypeRaw() {
+  const sequelize = Document.sequelize;
+  return sequelize.query(FILES_BY_DISTRIBUTION_TYPE_SQL, { type: QueryTypes.SELECT });
+}
+
 module.exports = {
   createDocument,
   createDocumentFile,
@@ -145,7 +290,11 @@ module.exports = {
   getDocumentFileByDocumentAndFileId,
   getByAlfrescoIds,
   listAllWithoutSearch,
+  getDocumentIdsByAlfrescoFileIds,
+  searchDocuments,
   updateDocument,
   getDocumentFilesByDocumentId,
   deleteDocument,
+  getFileStatsSummaryRaw,
+  getFilesByDistributionAndTypeRaw,
 };
