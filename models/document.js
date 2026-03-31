@@ -38,6 +38,11 @@ const Document = db.sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    distribution: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: "Team or org unit that uploaded / owns distribution",
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: true,

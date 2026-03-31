@@ -140,6 +140,24 @@ curl -X GET "http://localhost:5001/api/documents?page=1&limit=10&category_id=1&s
   -H "Authorization: Bearer $TOKEN"
 ```
 
+### GET /api/documents/stats/summary – File counts and sizes (all / images / PDFs / other)
+
+Returns `data.total_assets`, `data.images`, `data.pdfs`, `data.other_files` — each has `count`, `size_bytes`, `size_gb` (binary GB, 1024³).
+
+```bash
+curl -X GET "http://localhost:5001/api/documents/stats/summary" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### GET /api/documents/stats/by-distribution – Files by team (`distribution`) and `media_type`
+
+Returns `data` as an array of `{ distribution, type, file_count, total_size_bytes, total_size_gb }`. `type` is the file’s `media_type` (`unknown` if unset).
+
+```bash
+curl -X GET "http://localhost:5001/api/documents/stats/by-distribution" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ### POST /api/documents – Create document (with optional file upload)
 
 ```bash
@@ -147,13 +165,16 @@ curl -X GET "http://localhost:5001/api/documents?page=1&limit=10&category_id=1&s
 curl -X POST "http://localhost:5001/api/documents" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"title\":\"My Document\",\"description\":\"Optional description\",\"tags\":\"tag1,tag2\",\"category_id\":1}"
+  -d "{\"title\":\"My Document\",\"description\":\"Optional description\",\"tags\":\"tag1,tag2\",\"category_id\":1,\"distribution\":\"Marketing\"}"
 
-# With file upload (multipart)
+# With file upload (multipart) — distribution = team; asset_type for all files; optional per-file JSON arrays
 curl -X POST "http://localhost:5001/api/documents" \
   -H "Authorization: Bearer $TOKEN" \
   -F "title=My Document" \
   -F "description=Optional description" \
+  -F "distribution=Marketing" \
+  -F "asset_type=Product brochure" \
+  -F 'file_asset_types=["One-pager","Spec sheet"]' \
   -F "files=@/path/to/file1.pdf" \
   -F "files=@/path/to/file2.docx"
 ```
@@ -175,11 +196,26 @@ curl -X GET "http://localhost:5001/api/documents/1/files/1/content" \
 
 ### POST /api/documents/search – Search documents
 
+All filters are combined with **AND**. With `search_text`, Alfresco matches are intersected with the DB filters. Omit criteria to list (with optional `category_id`, `page`, `limit`).
+
 ```bash
+# Alfresco full-text + DB filters
 curl -X POST "http://localhost:5001/api/documents/search" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"search_text\":\"keyword\",\"category_id\":1,\"page\":1,\"limit\":20}"
+  -d "{\"search_text\":\"keyword\",\"title\":\"Report\",\"distribution\":\"Marketing\",\"media_type\":\"image\",\"asset_type\":\"Brochure\",\"category_id\":1,\"created_by\":1,\"page\":1,\"limit\":20}"
+
+# DB-only multi-field (no Alfresco)
+curl -X POST "http://localhost:5001/api/documents/search" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"description\":\"quarterly\",\"tags\":\"finance\",\"distribution\":\"Sales\"}"
+
+# Same fields nested under search_fields
+curl -X POST "http://localhost:5001/api/documents/search" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"search_fields\":{\"title\":\"Budget\",\"category_id\":2}}"
 ```
 
 ### PUT /api/documents/:id – Update document
@@ -188,7 +224,7 @@ curl -X POST "http://localhost:5001/api/documents/search" \
 curl -X PUT "http://localhost:5001/api/documents/1" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"title\":\"Updated Title\",\"description\":\"Updated description\",\"tags\":\"new,tags\",\"category_id\":2}"
+  -d "{\"title\":\"Updated Title\",\"description\":\"Updated description\",\"tags\":\"new,tags\",\"category_id\":2,\"distribution\":\"Legal\"}"
 ```
 
 ### DELETE /api/documents/:id – Delete document
@@ -218,6 +254,8 @@ curl -X DELETE "http://localhost:5001/api/documents/1" \
 | PUT | /api/tags-master/:id | Yes | Update tag |
 | DELETE | /api/tags-master/:id | Yes | Delete tag |
 | GET | /api/documents | Yes | List documents |
+| GET | /api/documents/stats/summary | Yes | File counts & sizes (assets, images, PDFs, other) |
+| GET | /api/documents/stats/by-distribution | Yes | Files by distribution & media type |
 | POST | /api/documents | Yes | Create document |
 | POST | /api/documents/search | Yes | Search documents |
 | GET | /api/documents/:id | Yes | Get document |
