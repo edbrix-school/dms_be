@@ -2,7 +2,7 @@ const TagMaster = require("../models/tagMaster");
 
 async function list() {
   const rows = await TagMaster.findAll({
-    order: [["name", "ASC"]],
+    order: [["tag_id", "DESC"]],
   });
   return rows.map((r) => r.toJSON());
 }
