@@ -47,7 +47,7 @@ const FILE_LIST_ATTRS = [
   "created_at",
 ];
 
-async function createDocument(data) {
+async function createDocument(data, options = {}) {
   const doc = await Document.create({
     title: data.title,
     description: data.description || null,
@@ -57,11 +57,11 @@ async function createDocument(data) {
     updated_by: data.updated_by || null,
     cover_image: data.cover_image || null,
     distribution: data.distribution != null && String(data.distribution).trim() !== "" ? String(data.distribution).trim() : null,
-  });
+  }, options);
   return doc.toJSON();
 }
 
-async function createDocumentFile(data) {
+async function createDocumentFile(data, options = {}) {
   const row = await DocumentFile.create({
     document_id: data.document_id,
     file_name: data.file_name,
@@ -76,7 +76,7 @@ async function createDocumentFile(data) {
       data.is_private === 1 ||
       data.is_private === "1" ||
       data.is_private === "true",
-  });
+  }, options);
   return row.toJSON();
 }
 
