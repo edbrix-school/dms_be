@@ -2,7 +2,8 @@ const Category = require("../models/category");
 
 async function list(flat = true) {
   const categories = await Category.findAll({
-    order: [["sort_order", "ASC"], ["name", "ASC"]],
+    // order: [["sort_order", "ASC"], ["name", "ASC"]],
+    order: [["sort_order", "ASC"], ["category_id", "DESC"]],
   });
   const arr = categories.map((c) => c.toJSON());
   if (flat) return arr;
