@@ -93,6 +93,18 @@ router.get("/:id/files/:fileId/content", verifyAuth, async (req, res) => {
   }
 });
 
+router.get("/:id/files/:fileId/open", verifyAuth, async (req, res) => {
+  try {
+    const result = await documentService.getFileContent(req.params.id, req.params.fileId);
+    if (!result) return res.status(404).json({ success: false, message: "File not found." });
+    res.setHeader("Content-Disposition", `inline; filename="${result.filename}"`);
+    res.setHeader("Content-Type", result.media_type || "application/octet-stream");
+    return res.send(result.buffer);
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 router.put("/:id", verifyAuth, async (req, res) => {
   const errors = Util.validate_prams(req.body, { title: "ANY" }, { title: "Title" });
   if (Object.keys(errors).length > 0) {
