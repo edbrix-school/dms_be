@@ -51,6 +51,7 @@ async function createDocument(data, options = {}) {
   const doc = await Document.create({
     title: data.title,
     description: data.description || null,
+    doc_id: data.doc_id != null && String(data.doc_id).trim() !== "" ? String(data.doc_id).trim() : null,
     tags: data.tags || null,
     category_id: data.category_id || null,
     created_by: data.created_by,
@@ -184,6 +185,7 @@ async function searchDocuments(filters = {}) {
     media_type,
     asset_type,
     document_id_in,
+    doc_id_in,
   } = filters;
 
   const whereDoc = {};
@@ -192,6 +194,11 @@ async function searchDocuments(filters = {}) {
   if (document_id_in && document_id_in.length > 0) {
     whereDoc.document_id = { [Op.in]: document_id_in };
   } else if (document_id_in && document_id_in.length === 0) {
+    return { rows: [], count: 0 };
+  }
+  if (doc_id_in && doc_id_in.length > 0) {
+    whereDoc.doc_id = { [Op.in]: doc_id_in };
+  } else if (doc_id_in && doc_id_in.length === 0) {
     return { rows: [], count: 0 };
   }
 
@@ -246,6 +253,9 @@ async function updateDocument(id, data) {
     category_id: data.category_id,
     updated_by: data.updated_by,
   };
+  if (data.doc_id !== undefined) {
+    patch.doc_id = data.doc_id != null && String(data.doc_id).trim() !== "" ? String(data.doc_id).trim() : null;
+  }
   if (data.distribution !== undefined) {
     patch.distribution =
       data.distribution != null && String(data.distribution).trim() !== ""

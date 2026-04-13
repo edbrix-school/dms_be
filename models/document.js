@@ -18,6 +18,10 @@ const Document = db.sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    doc_id: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     tags: {
       type: DataTypes.STRING,
       allowNull: true,

@@ -14,10 +14,39 @@ function parseStringArray(raw) {
   }
 }
 
+function parseDocIdFilters(...values) {
+  const out = [];
+  for (const raw of values) {
+    if (raw == null || raw === "") continue;
+    if (Array.isArray(raw)) {
+      out.push(...raw);
+      continue;
+    }
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          out.push(...parsed);
+          continue;
+        }
+      } catch (_) {}
+      if (trimmed.includes(",")) {
+        out.push(...trimmed.split(","));
+        continue;
+      }
+    }
+    out.push(raw);
+  }
+  return [...new Set(out.map((v) => String(v).trim()).filter((v) => v !== ""))];
+}
+
 async function createDocument(req, body, userId) {
   const doc = await documentRepository.createDocument({
     title: body.title,
     description: body.description || null,
+    doc_id: body.doc_id,
     tags: body.tags || null,
     category_id: body.category_id || null,
     created_by: userId,
@@ -93,6 +122,8 @@ function mergeSearchFields(body) {
     distribution: pick("distribution"),
     media_type: pick("media_type"),
     asset_type: pick("asset_type"),
+    doc_id: pick("doc_id"),
+    doc_ids: pick("doc_ids"),
     search_text: pick("search_text"),
   };
 }
@@ -106,6 +137,7 @@ function hasAnyDbSearchCriterion(f) {
     nonEmpty(f.distribution) ||
     nonEmpty(f.media_type) ||
     nonEmpty(f.asset_type) ||
+    parseDocIdFilters(f.doc_id, f.doc_ids).length > 0 ||
     (f.category_id != null && f.category_id !== "") ||
     (f.created_by != null && f.created_by !== "")
   );
@@ -113,9 +145,11 @@ function hasAnyDbSearchCriterion(f) {
 
 async function searchDocuments(body, user) {
   const f = mergeSearchFields(body);
+  const docIdIn = parseDocIdFilters(f.doc_id, f.doc_ids);
+  const effectiveDocIdIn = docIdIn.length > 0 ? docIdIn : null;
   const searchText = (f.search_text != null ? String(f.search_text) : "").trim();
   const hasAlfresco = !!searchText;
-  const hasDb = hasAnyDbSearchCriterion(f);
+  const hasDb = hasAnyDbSearchCriterion({ ...f, doc_id: effectiveDocIdIn });
 
   if (!hasDb && !hasAlfresco) {
     return documentRepository.listAllWithoutSearch({
@@ -145,6 +179,7 @@ async function searchDocuments(body, user) {
     distribution: f.distribution,
     media_type: f.media_type,
     asset_type: f.asset_type,
+    doc_id_in: effectiveDocIdIn,
     document_id_in: documentIdIn,
   });
 }
@@ -153,6 +188,7 @@ async function updateDocument(id, body, userId) {
   await documentRepository.updateDocument(id, {
     title: body.title,
     description: body.description,
+    doc_id: body.doc_id,
     tags: body.tags,
     category_id: body.category_id,
     distribution: body.distribution,
