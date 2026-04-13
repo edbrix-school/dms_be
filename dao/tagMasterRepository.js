@@ -1,9 +1,21 @@
+const { Op } = require("sequelize");
 const TagMaster = require("../models/tagMaster");
 
-async function list() {
-  const rows = await TagMaster.findAll({
-    order: [["tag_id", "DESC"]],
-  });
+async function list(pagination = {}) {
+  const order = [["tag_id", "DESC"]];
+  const paginated = pagination && pagination.page != null && pagination.limit != null;
+
+  if (paginated) {
+    const { page, limit } = pagination;
+    const { rows, count } = await TagMaster.findAndCountAll({
+      order,
+      limit,
+      offset: (page - 1) * limit,
+    });
+    return { rows: rows.map((r) => r.toJSON()), count, page, limit };
+  }
+
+  const rows = await TagMaster.findAll({ order });
   return rows.map((r) => r.toJSON());
 }
 
@@ -13,13 +25,22 @@ async function getById(id) {
 }
 
 async function getByName(name) {
-  const row = await TagMaster.findOne({ where: { name } });
+  const trimmedName = String(name || "").trim();
+  if (!trimmedName) return null;
+  const row = await TagMaster.findOne({
+    where: { name: { [Op.iLike]: trimmedName } },
+  });
   return row ? row.toJSON() : null;
 }
 
 async function create(data) {
+  const trimmedName = String(data.name || "").trim();
+  const existing = await getByName(trimmedName);
+  if (existing) {
+    throw new Error("A tag with this name already exists.");
+  }
   const row = await TagMaster.create({
-    name: data.name,
+    name: trimmedName,
   });
   return row.toJSON();
 }

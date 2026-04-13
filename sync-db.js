@@ -17,7 +17,7 @@
 require("dotenv").config();
 
 require("./models");
-const { Role, User, Category, Document, TagMaster } = require("./models");
+const { Role, User, Category, Document, TagMaster, CategoryTypeMaster, ModuleNameMaster } = require("./models");
 const db = require("./config/db");
 
 const DEFAULT_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "admin@dms.local";
@@ -35,6 +35,12 @@ const CATEGORY_SAMPLES = [
 ];
 
 const TAG_SAMPLES = ["Confidential", "Public", "Draft", "Archived", "Q1-2026"];
+const CATEGORY_TYPE_SAMPLES = ["Policy", "Product"];
+const MODULE_NAME_SAMPLES = [
+  { categoryTypeName: "Policy", name: "HR" },
+  { categoryTypeName: "Policy", name: "Compliance" },
+  { categoryTypeName: "Product", name: "Catalog" },
+];
 
 async function seedCore(t, bcrypt) {
   const [adminRole] = await Role.findOrCreate({
@@ -71,10 +77,44 @@ async function seedCore(t, bcrypt) {
 }
 
 async function seedSampleData(t, bcrypt, admin) {
+  const categoryTypeByName = {};
+  for (const name of CATEGORY_TYPE_SAMPLES) {
+    const [row] = await CategoryTypeMaster.findOrCreate({
+      where: { name },
+      defaults: { name },
+      transaction: t,
+    });
+    categoryTypeByName[name] = row;
+  }
+  console.log(`Category types seeded (${CATEGORY_TYPE_SAMPLES.length} rows).`);
+
+  for (const m of MODULE_NAME_SAMPLES) {
+    const categoryType = categoryTypeByName[m.categoryTypeName];
+    if (!categoryType) continue;
+    await ModuleNameMaster.findOrCreate({
+      where: { category_type_id: categoryType.category_type_id, name: m.name },
+      defaults: { category_type_id: categoryType.category_type_id, name: m.name },
+      transaction: t,
+    });
+  }
+  console.log(`Module names seeded (${MODULE_NAME_SAMPLES.length} rows).`);
+
+  const defaultCategoryType = categoryTypeByName.Policy || null;
+  const defaultModule = defaultCategoryType
+    ? await ModuleNameMaster.findOne({
+        where: { category_type_id: defaultCategoryType.category_type_id, name: "Compliance" },
+        transaction: t,
+      })
+    : null;
+
   for (const c of CATEGORY_SAMPLES) {
     await Category.findOrCreate({
       where: { name: c.name },
-      defaults: c,
+      defaults: {
+        ...c,
+        category_type_id: defaultCategoryType ? defaultCategoryType.category_type_id : null,
+        module_id: defaultModule ? defaultModule.module_id : null,
+      },
       transaction: t,
     });
   }

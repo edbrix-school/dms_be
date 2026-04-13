@@ -12,6 +12,8 @@ const authRoutes = require("./routes/authRoutes");
 const documentRoutes = require("./routes/documentRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const tagMasterRoutes = require("./routes/tagMasterRoutes");
+const categoryTypeMasterRoutes = require("./routes/categoryTypeMasterRoutes");
+const moduleNameMasterRoutes = require("./routes/moduleNameMasterRoutes");
 const userRoutes = require("./routes/userRoutes");
 
 const app = express();
@@ -25,6 +27,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/tags-master", tagMasterRoutes);
+app.use("/api/category-types", categoryTypeMasterRoutes);
+app.use("/api/module-names", moduleNameMasterRoutes);
 app.use("/api/users", userRoutes);
 
 app.get("/health", (req, res) => {

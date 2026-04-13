@@ -5,8 +5,19 @@ const Category = require("./category");
 const Document = require("./document");
 const DocumentFile = require("./documentFile");
 const TagMaster = require("./tagMaster");
+const CategoryTypeMaster = require("./categoryTypeMaster");
+const ModuleNameMaster = require("./moduleNameMaster");
 
 Document.belongsTo(Category, { foreignKey: "category_id", as: "category" });
 Category.hasMany(Document, { foreignKey: "category_id", as: "documents" });
 
-module.exports = { Role, User, Category, Document, DocumentFile, TagMaster };
+CategoryTypeMaster.hasMany(ModuleNameMaster, { foreignKey: "category_type_id", as: "module_names" });
+ModuleNameMaster.belongsTo(CategoryTypeMaster, { foreignKey: "category_type_id", as: "category_type" });
+
+Category.belongsTo(CategoryTypeMaster, { foreignKey: "category_type_id", as: "category_type" });
+CategoryTypeMaster.hasMany(Category, { foreignKey: "category_type_id", as: "categories" });
+
+Category.belongsTo(ModuleNameMaster, { foreignKey: "module_id", as: "module" });
+ModuleNameMaster.hasMany(Category, { foreignKey: "module_id", as: "categories" });
+
+module.exports = { Role, User, Category, Document, DocumentFile, TagMaster, CategoryTypeMaster, ModuleNameMaster };
