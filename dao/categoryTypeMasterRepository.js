@@ -1,10 +1,21 @@
 const { Op } = require("sequelize");
 const { CategoryTypeMaster } = require("../models");
 
-async function list() {
-  const rows = await CategoryTypeMaster.findAll({
-    order: [["category_type_id", "DESC"]],
-  });
+async function list(pagination = {}) {
+  const order = [["category_type_id", "DESC"]];
+  const paginated = pagination && pagination.page != null && pagination.limit != null;
+
+  if (paginated) {
+    const { page, limit } = pagination;
+    const { rows, count } = await CategoryTypeMaster.findAndCountAll({
+      order,
+      limit,
+      offset: (page - 1) * limit,
+    });
+    return { rows: rows.map((row) => row.toJSON()), count, page, limit };
+  }
+
+  const rows = await CategoryTypeMaster.findAll({ order });
   return rows.map((row) => row.toJSON());
 }
 

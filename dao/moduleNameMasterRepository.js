@@ -3,14 +3,28 @@ const { ModuleNameMaster, CategoryTypeMaster } = require("../models");
 
 const includeCategoryType = [{ model: CategoryTypeMaster, as: "category_type", attributes: ["category_type_id", "name"], required: false }];
 
-async function list(category_type_id = null) {
+async function list(category_type_id = null, pagination = {}) {
   const where = {};
   if (category_type_id != null) where.category_type_id = category_type_id;
+  const order = [["module_id", "DESC"]];
+  const paginated = pagination && pagination.page != null && pagination.limit != null;
+
+  if (paginated) {
+    const { page, limit } = pagination;
+    const { rows, count } = await ModuleNameMaster.findAndCountAll({
+      where,
+      include: includeCategoryType,
+      order,
+      limit,
+      offset: (page - 1) * limit,
+    });
+    return { rows: rows.map((row) => row.toJSON()), count, page, limit };
+  }
 
   const rows = await ModuleNameMaster.findAll({
     where,
     include: includeCategoryType,
-    order: [["module_id", "DESC"]],
+    order,
   });
   return rows.map((row) => row.toJSON());
 }

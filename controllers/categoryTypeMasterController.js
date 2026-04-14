@@ -3,7 +3,13 @@ const Util = require("../common/Util");
 
 async function list(req, res) {
   try {
-    const rows = await categoryTypeMasterService.listCategoryTypes();
+    const pageNum = Number.parseInt(req.query.page, 10);
+    const limitNum = Number.parseInt(req.query.limit, 10);
+    const pagination =
+      Number.isInteger(pageNum) && pageNum > 0 && Number.isInteger(limitNum) && limitNum > 0
+        ? { page: pageNum, limit: limitNum }
+        : {};
+    const rows = await categoryTypeMasterService.listCategoryTypes(pagination);
     return res.status(200).json(Util.getSuccessResponse(rows));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });

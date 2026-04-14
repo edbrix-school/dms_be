@@ -1,7 +1,7 @@
 const moduleNameMasterRepository = require("../dao/moduleNameMasterRepository");
 
-async function listModuleNames(category_type_id) {
-  return moduleNameMasterRepository.list(category_type_id);
+async function listModuleNames(category_type_id, pagination = {}) {
+  return moduleNameMasterRepository.list(category_type_id, pagination);
 }
 
 async function getModuleNameById(id) {

@@ -394,6 +394,11 @@ const options = {
         get: {
           tags: ["Category types"],
           summary: "List category types",
+          description: "All rows from category type master. Supports optional pagination.",
+          parameters: [
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number" },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size" },
+          ],
           responses: {
             200: { description: "Category type rows", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
           },
@@ -470,8 +475,11 @@ const options = {
         get: {
           tags: ["Module names"],
           summary: "List module names",
+          description: "All rows from module name master. Supports optional pagination and category type filtering.",
           parameters: [
             { name: "category_type_id", in: "query", schema: { type: "integer" }, description: "Optional category type filter" },
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number" },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size" },
           ],
           responses: {
             200: { description: "Module name rows", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },

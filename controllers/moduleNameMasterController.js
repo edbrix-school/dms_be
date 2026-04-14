@@ -7,7 +7,13 @@ async function list(req, res) {
     if (req.query.category_type_id != null && (!Number.isInteger(categoryTypeId) || categoryTypeId <= 0)) {
       return res.status(400).json({ success: false, message: "category_type_id must be a positive integer." });
     }
-    const rows = await moduleNameMasterService.listModuleNames(categoryTypeId);
+    const pageNum = Number.parseInt(req.query.page, 10);
+    const limitNum = Number.parseInt(req.query.limit, 10);
+    const pagination =
+      Number.isInteger(pageNum) && pageNum > 0 && Number.isInteger(limitNum) && limitNum > 0
+        ? { page: pageNum, limit: limitNum }
+        : {};
+    const rows = await moduleNameMasterService.listModuleNames(categoryTypeId, pagination);
     return res.status(200).json(Util.getSuccessResponse(rows));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });

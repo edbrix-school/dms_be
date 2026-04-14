@@ -1,7 +1,7 @@
 const categoryTypeMasterRepository = require("../dao/categoryTypeMasterRepository");
 
-async function listCategoryTypes() {
-  return categoryTypeMasterRepository.list();
+async function listCategoryTypes(pagination = {}) {
+  return categoryTypeMasterRepository.list(pagination);
 }
 
 async function getCategoryTypeById(id) {
