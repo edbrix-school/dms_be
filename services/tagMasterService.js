@@ -1,7 +1,7 @@
 const tagMasterRepository = require("../dao/tagMasterRepository");
 
-async function listTags(pagination = {}) {
-  return tagMasterRepository.list(pagination);
+async function listTags(pagination = {}, filters = {}) {
+  return tagMasterRepository.list(pagination, filters);
 }
 
 async function getTagById(id) {

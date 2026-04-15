@@ -1,13 +1,19 @@
 const { Op } = require("sequelize");
 const TagMaster = require("../models/tagMaster");
 
-async function list(pagination = {}) {
+async function list(pagination = {}, filters = {}) {
   const order = [["tag_id", "DESC"]];
+  const where = {};
+  const trimmedName = String(filters.name || "").trim();
+  if (trimmedName) {
+    where.name = { [Op.iLike]: `%${trimmedName}%` };
+  }
   const paginated = pagination && pagination.page != null && pagination.limit != null;
 
   if (paginated) {
     const { page, limit } = pagination;
     const { rows, count } = await TagMaster.findAndCountAll({
+      where,
       order,
       limit,
       offset: (page - 1) * limit,
@@ -15,7 +21,7 @@ async function list(pagination = {}) {
     return { rows: rows.map((r) => r.toJSON()), count, page, limit };
   }
 
-  const rows = await TagMaster.findAll({ order });
+  const rows = await TagMaster.findAll({ where, order });
   return rows.map((r) => r.toJSON());
 }
 

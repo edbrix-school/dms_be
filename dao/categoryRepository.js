@@ -44,13 +44,19 @@ async function validateCategoryTypeAndModule(category_type_id, module_id) {
   }
 }
 
-async function list(flat = true, pagination = {}) {
+async function list(flat = true, pagination = {}, filters = {}) {
   const order = [["sort_order", "ASC"], ["category_id", "DESC"]];
+  const where = {};
+  const trimmedName = String(filters.name || "").trim();
+  if (trimmedName) {
+    where.name = { [Op.iLike]: `%${trimmedName}%` };
+  }
   const paginated = flat && pagination && pagination.page != null && pagination.limit != null;
 
   if (paginated) {
     const { page, limit } = pagination;
     const { rows, count } = await Category.findAndCountAll({
+      where,
       include: categoryInclude,
       order,
       limit,
@@ -60,6 +66,7 @@ async function list(flat = true, pagination = {}) {
   }
 
   const categories = await Category.findAll({
+    where,
     include: categoryInclude,
     order,
   });

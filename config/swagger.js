@@ -296,9 +296,10 @@ const options = {
         get: {
           tags: ["Categories"],
           summary: "List categories",
-          description: "Get categories. `flat=false` returns tree; pagination (`page`, `limit`) applies only to flat responses.",
+          description: "Get categories. Supports optional partial name filter. `flat=false` returns tree; pagination (`page`, `limit`) applies only to flat responses.",
           parameters: [
             { name: "flat", in: "query", schema: { type: "boolean", default: true }, description: "If false, returns nested tree" },
+            { name: "name", in: "query", schema: { type: "string" }, description: "Optional partial match for category name" },
             { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number for flat mode" },
             { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size for flat mode" },
           ],
@@ -563,8 +564,9 @@ const options = {
         get: {
           tags: ["Tags master"],
           summary: "List tags",
-          description: "All rows from dms_tags_master. Supports optional pagination.",
+          description: "All rows from dms_tags_master. Supports optional pagination and partial name filter.",
           parameters: [
+            { name: "name", in: "query", schema: { type: "string" }, description: "Optional partial match for tag name" },
             { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number" },
             { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size" },
           ],

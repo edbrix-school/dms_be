@@ -8,13 +8,14 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const flat = req.query.flat !== "false";
+    const name = String(req.query.name || "").trim();
     const pageNum = Number.parseInt(req.query.page, 10);
     const limitNum = Number.parseInt(req.query.limit, 10);
     const pagination =
       flat && Number.isInteger(pageNum) && pageNum > 0 && Number.isInteger(limitNum) && limitNum > 0
         ? { page: pageNum, limit: limitNum }
         : {};
-    const list = await categoryService.listCategories(flat, pagination);
+    const list = await categoryService.listCategories(flat, pagination, { name });
     return res.status(200).json(Util.getSuccessResponse(list));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });

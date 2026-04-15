@@ -1,7 +1,7 @@
 const categoryRepository = require("../dao/categoryRepository");
 
-async function listCategories(flat = true, pagination = {}) {
-  return categoryRepository.list(flat, pagination);
+async function listCategories(flat = true, pagination = {}, filters = {}) {
+  return categoryRepository.list(flat, pagination, filters);
 }
 
 async function getCategoryById(id) {
