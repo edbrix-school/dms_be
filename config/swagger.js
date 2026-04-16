@@ -215,6 +215,7 @@ const options = {
             category_id: { type: "integer", nullable: true },
             created_by: { type: "integer", nullable: true },
             media_type: { type: "string", enum: ["image", "video", "audio", "document", "other"] },
+            file_type: { type: "string", description: "Exact file extension filter, such as pdf" },
             asset_type: { type: "string", description: "Partial match on file asset_type" },
             page: { type: "integer", default: 1 },
             limit: { type: "integer", default: 20 },
