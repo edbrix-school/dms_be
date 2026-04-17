@@ -137,7 +137,7 @@ async function getById(id, options = {}) {
   delete queryOptions.includeFiles;
   const include = [
     { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name", "email"] },
-    { model: Category, as: "category", attributes: ["category_id", "name"] },
+    { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
   ];
   if (includeFiles) {
     include.push({ model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS });
@@ -162,7 +162,7 @@ async function list(filters = {}) {
     where,
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
       { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type", "media_type", "asset_type", "file_size"] },
     ],
     limit: Math.min(limit, 100),
@@ -191,7 +191,7 @@ async function getByAlfrescoIds(alfrescoIds, filters = {}) {
   if (!alfrescoIds || alfrescoIds.length === 0) return { rows: [], count: 0 };
   const where = { file_id: { [Op.in]: alfrescoIds } };
   const include = [
-    { model: Document, as: "document", include: [{ model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] }, { model: Category, as: "category", attributes: ["category_id", "name"] }] },
+    { model: Document, as: "document", include: [{ model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] }, { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] }] },
   ];
   const files = await DocumentFile.findAll({ where, include });
   const docIds = [...new Set(files.map((f) => f.document_id))];
@@ -199,7 +199,7 @@ async function getByAlfrescoIds(alfrescoIds, filters = {}) {
     where: { document_id: { [Op.in]: docIds } },
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
       { model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS },
     ],
   });
@@ -293,7 +293,7 @@ async function searchDocuments(filters = {}) {
     col: Document.primaryKeyAttribute || "document_id",
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
       fileInclude,
     ],
     limit: perPage,
