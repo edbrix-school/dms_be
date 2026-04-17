@@ -1,15 +1,13 @@
 const { Op } = require("sequelize");
-const { Category, Document, CategoryTypeMaster, ModuleNameMaster } = require("../models");
+const { Category, Document, CategoryTypeMaster } = require("../models");
 
 const categoryInclude = [
   { model: CategoryTypeMaster, as: "category_type", attributes: ["category_type_id", "name"], required: false },
-  { model: ModuleNameMaster, as: "module", attributes: ["module_id", "category_type_id", "name"], required: false },
 ];
 
 function mapCategory(row) {
   const json = row.toJSON();
   json.category_type = json.category_type || null;
-  json.module = json.module || null;
   return json;
 }
 
@@ -28,19 +26,9 @@ function buildTree(arr) {
   return roots;
 }
 
-async function validateCategoryTypeAndModule(category_type_id, module_id) {
-  if ((category_type_id == null && module_id != null) || (category_type_id != null && module_id == null)) {
-    throw new Error("Both category_type_id and module_id are required together.");
-  }
-  if (category_type_id == null && module_id == null) return;
-
-  const categoryType = await CategoryTypeMaster.findByPk(category_type_id);
-  if (!categoryType) throw new Error("Invalid category_type_id.");
-
-  const moduleRow = await ModuleNameMaster.findByPk(module_id);
-  if (!moduleRow) throw new Error("Invalid module_id.");
-  if (String(moduleRow.category_type_id) !== String(category_type_id)) {
-    throw new Error("Selected module_id does not belong to the provided category_type_id.");
+async function validateCategoryTypeAndModule(category_type_id) {
+  if (category_type_id == null) {
+    throw new Error("category_type_id is required together.");
   }
 }
 
@@ -97,15 +85,16 @@ async function create(data) {
   }
 
   const categoryTypeId = data.category_type_id != null ? Number(data.category_type_id) : null;
-  const moduleId = data.module_id != null ? Number(data.module_id) : null;
-  await validateCategoryTypeAndModule(categoryTypeId, moduleId);
+  await validateCategoryTypeAndModule(categoryTypeId);
 
   const c = await Category.create({
     name: trimmedName,
     description: data.description || null,
     parent_id: data.parent_id || null,
     category_type_id: categoryTypeId,
-    module_id: moduleId,
+    doc_id: data.doc_id != null ? String(data.doc_id).trim() || null : null,
+    module_name: data.module_name != null ? String(data.module_name).trim() || null : null,
+    screen_name: data.screen_name != null ? String(data.screen_name).trim() || null : null,
     sort_order: data.sort_order != null ? data.sort_order : 0,
   });
   return getById(c.category_id);
@@ -122,8 +111,7 @@ async function update(id, data) {
   }
 
   const categoryTypeId = data.category_type_id != null ? Number(data.category_type_id) : null;
-  const moduleId = data.module_id != null ? Number(data.module_id) : null;
-  await validateCategoryTypeAndModule(categoryTypeId, moduleId);
+  await validateCategoryTypeAndModule(categoryTypeId);
 
   await Category.update(
     {
@@ -131,7 +119,9 @@ async function update(id, data) {
       description: data.description || null,
       parent_id: data.parent_id || null,
       category_type_id: categoryTypeId,
-      module_id: moduleId,
+      doc_id: data.doc_id != null ? String(data.doc_id).trim() || null : null,
+      module_name: data.module_name != null ? String(data.module_name).trim() || null : null,
+      screen_name: data.screen_name != null ? String(data.screen_name).trim() || null : null,
       sort_order: data.sort_order != null ? data.sort_order : 0,
     },
     { where: { category_id: id } }

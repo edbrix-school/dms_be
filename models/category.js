@@ -25,8 +25,16 @@ const Category = db.sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
-    module_id: {
-      type: DataTypes.INTEGER,
+    doc_id: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    module_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    screen_name: {
+      type: DataTypes.STRING,
       allowNull: true,
     },
     sort_order: {
