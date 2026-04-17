@@ -35,7 +35,7 @@ const CATEGORY_SAMPLES = [
 ];
 
 const TAG_SAMPLES = ["Confidential", "Public", "Draft", "Archived", "Q1-2026"];
-const CATEGORY_TYPE_SAMPLES = ["Policy", "Product"];
+const CATEGORY_TYPE_SAMPLES = ["Transaction", "New"];
 
 async function seedCore(t, bcrypt) {
   const [adminRole] = await Role.findOrCreate({
