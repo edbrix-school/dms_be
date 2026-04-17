@@ -165,12 +165,13 @@ curl -X GET "http://localhost:5001/api/documents/stats/by-distribution" \
 curl -X POST "http://localhost:5001/api/documents" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"title\":\"My Document\",\"description\":\"Optional description\",\"tags\":\"tag1,tag2\",\"category_id\":1,\"distribution\":\"Marketing\"}"
+  -d "{\"title\":\"My Document\",\"doc_id\":\"DOC-1001\",\"description\":\"Optional description\",\"tags\":\"tag1,tag2\",\"category_id\":1,\"distribution\":\"Marketing\"}"
 
 # With file upload (multipart) — distribution = team; asset_type for all files; optional per-file JSON arrays
 curl -X POST "http://localhost:5001/api/documents" \
   -H "Authorization: Bearer $TOKEN" \
   -F "title=My Document" \
+  -F "doc_id=DOC-1002" \
   -F "description=Optional description" \
   -F "distribution=Marketing" \
   -F "asset_type=Product brochure" \
@@ -203,19 +204,19 @@ All filters are combined with **AND**. With `search_text`, Alfresco matches are 
 curl -X POST "http://localhost:5001/api/documents/search" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"search_text\":\"keyword\",\"title\":\"Report\",\"distribution\":\"Marketing\",\"media_type\":\"image\",\"asset_type\":\"Brochure\",\"category_id\":1,\"created_by\":1,\"page\":1,\"limit\":20}"
+  -d "{\"search_text\":\"keyword\",\"title\":\"Report\",\"distribution\":\"Marketing\",\"doc_ids\":[\"DOC-1001\",\"DOC-1002\"],\"media_type\":\"image\",\"asset_type\":\"Brochure\",\"category_id\":1,\"created_by\":1,\"page\":1,\"limit\":20}"
 
 # DB-only multi-field (no Alfresco)
 curl -X POST "http://localhost:5001/api/documents/search" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"description\":\"quarterly\",\"tags\":\"finance\",\"distribution\":\"Sales\"}"
+  -d "{\"description\":\"quarterly\",\"tags\":\"finance\",\"distribution\":\"Sales\",\"doc_id\":\"DOC-1001\"}"
 
 # Same fields nested under search_fields
 curl -X POST "http://localhost:5001/api/documents/search" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"search_fields\":{\"title\":\"Budget\",\"category_id\":2}}"
+  -d "{\"search_fields\":{\"title\":\"Budget\",\"category_id\":2,\"doc_ids\":[\"DOC-2001\",\"DOC-2002\"]}}"
 ```
 
 ### PUT /api/documents/:id – Update document
@@ -224,7 +225,7 @@ curl -X POST "http://localhost:5001/api/documents/search" \
 curl -X PUT "http://localhost:5001/api/documents/1" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"title\":\"Updated Title\",\"description\":\"Updated description\",\"tags\":\"new,tags\",\"category_id\":2,\"distribution\":\"Legal\"}"
+  -d "{\"title\":\"Updated Title\",\"doc_id\":\"DOC-1001-REV2\",\"description\":\"Updated description\",\"tags\":\"new,tags\",\"category_id\":2,\"distribution\":\"Legal\"}"
 ```
 
 ### DELETE /api/documents/:id – Delete document

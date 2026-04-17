@@ -12,10 +12,12 @@ const authRoutes = require("./routes/authRoutes");
 const documentRoutes = require("./routes/documentRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const tagMasterRoutes = require("./routes/tagMasterRoutes");
+const categoryTypeMasterRoutes = require("./routes/categoryTypeMasterRoutes");
 const userRoutes = require("./routes/userRoutes");
 
 const app = express();
-app.use(cors());
+// app.use(cors());
+app.use(cors({ origin: 'http://localhost:3000', credentials: true })); 
 app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
 app.use(bodyParser.json({ limit: "50mb" }));
 
@@ -24,6 +26,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/tags-master", tagMasterRoutes);
+app.use("/api/category-types", categoryTypeMasterRoutes);
 app.use("/api/users", userRoutes);
 
 app.get("/health", (req, res) => {

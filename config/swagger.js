@@ -80,6 +80,31 @@ const options = {
             category_id: { type: "integer" },
             name: { type: "string" },
             parent_id: { type: "integer", nullable: true },
+            category_type_id: { type: "integer", nullable: true },
+            doc_id: { type: "string", nullable: true },
+            module_name: { type: "string", nullable: true },
+            screen_name: { type: "string", nullable: true },
+            category_type: { $ref: "#/components/schemas/CategoryTypeMaster", nullable: true },
+          },
+        },
+        CategoryTypeMaster: {
+          type: "object",
+          properties: {
+            category_type_id: { type: "integer" },
+            name: { type: "string" },
+            created_at: { type: "string", format: "date-time", nullable: true },
+            updated_at: { type: "string", format: "date-time", nullable: true },
+          },
+        },
+        ModuleNameMaster: {
+          type: "object",
+          properties: {
+            module_id: { type: "integer" },
+            category_type_id: { type: "integer" },
+            name: { type: "string" },
+            created_at: { type: "string", format: "date-time", nullable: true },
+            updated_at: { type: "string", format: "date-time", nullable: true },
+            category_type: { $ref: "#/components/schemas/CategoryTypeMaster", nullable: true },
           },
         },
         TagMaster: {
@@ -89,6 +114,24 @@ const options = {
             name: { type: "string" },
             created_at: { type: "string", format: "date-time", nullable: true },
             updated_at: { type: "string", format: "date-time", nullable: true },
+          },
+        },
+        PaginatedCategoryResult: {
+          type: "object",
+          properties: {
+            rows: { type: "array", items: { $ref: "#/components/schemas/Category" } },
+            count: { type: "integer" },
+            page: { type: "integer" },
+            limit: { type: "integer" },
+          },
+        },
+        PaginatedTagMasterResult: {
+          type: "object",
+          properties: {
+            rows: { type: "array", items: { $ref: "#/components/schemas/TagMaster" } },
+            count: { type: "integer" },
+            page: { type: "integer" },
+            limit: { type: "integer" },
           },
         },
         DocumentFile: {
@@ -107,6 +150,7 @@ const options = {
           type: "object",
           properties: {
             document_id: { type: "integer" },
+            doc_id: { type: "string", nullable: true, description: "Business document identifier" },
             title: { type: "string" },
             description: { type: "string", nullable: true },
             tags: { type: "string", nullable: true },
@@ -163,9 +207,16 @@ const options = {
             description: { type: "string" },
             tags: { type: "string" },
             distribution: { type: "string", description: "Partial match on team / distribution" },
+            doc_id: { type: "string", description: "Single business document identifier filter" },
+            doc_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "Multiple business document identifiers (exact-match, OR within this array)",
+            },
             category_id: { type: "integer", nullable: true },
             created_by: { type: "integer", nullable: true },
             media_type: { type: "string", enum: ["image", "video", "audio", "document", "other"] },
+            file_type: { type: "string", description: "Exact file extension filter, such as pdf" },
             asset_type: { type: "string", description: "Partial match on file asset_type" },
             page: { type: "integer", default: 1 },
             limit: { type: "integer", default: 20 },
@@ -183,6 +234,8 @@ const options = {
       { name: "Auth", description: "Authentication" },
       { name: "Users", description: "Current user" },
       { name: "Categories", description: "Document categories" },
+      { name: "Category types", description: "Category type master data" },
+      { name: "Module names", description: "Module name master data" },
       { name: "Tags master", description: "dms_tags_master reference tags" },
       { name: "Documents", description: "Documents and files" },
     ],
@@ -245,9 +298,12 @@ const options = {
         get: {
           tags: ["Categories"],
           summary: "List categories",
-          description: "Get all categories. Use flat=false for tree structure.",
+          description: "Get categories. Supports optional partial name filter. `flat=false` returns tree; pagination (`page`, `limit`) applies only to flat responses.",
           parameters: [
             { name: "flat", in: "query", schema: { type: "boolean", default: true }, description: "If false, returns nested tree" },
+            { name: "name", in: "query", schema: { type: "string" }, description: "Optional partial match for category name" },
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number for flat mode" },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size for flat mode" },
           ],
           responses: {
             200: { description: "List of categories", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
@@ -267,7 +323,13 @@ const options = {
                   required: ["name"],
                   properties: {
                     name: { type: "string" },
+                    description: { type: "string", nullable: true },
+                    sort_order: { type: "integer", nullable: true },
                     parent_id: { type: "integer", nullable: true },
+                    category_type_id: { type: "integer", nullable: true },
+                    doc_id: { type: "string", nullable: true },
+                    module_name: { type: "string", nullable: true },
+                    screen_name: { type: "string", nullable: true },
                   },
                 },
               },
@@ -305,7 +367,13 @@ const options = {
                   required: ["name"],
                   properties: {
                     name: { type: "string" },
+                    description: { type: "string", nullable: true },
+                    sort_order: { type: "integer", nullable: true },
                     parent_id: { type: "integer", nullable: true },
+                    category_type_id: { type: "integer", nullable: true },
+                    doc_id: { type: "string", nullable: true },
+                    module_name: { type: "string", nullable: true },
+                    screen_name: { type: "string", nullable: true },
                   },
                 },
               },
@@ -329,11 +397,185 @@ const options = {
           },
         },
       },
+      "/api/category-types": {
+        get: {
+          tags: ["Category types"],
+          summary: "List category types",
+          description: "All rows from category type master. Supports optional pagination.",
+          parameters: [
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number" },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size" },
+          ],
+          responses: {
+            200: { description: "Category type rows", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+          },
+        },
+        post: {
+          tags: ["Category types"],
+          summary: "Create category type",
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name"],
+                  properties: { name: { type: "string" } },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: "Category type created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            400: { description: "Bad request", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/category-types/{id}": {
+        get: {
+          tags: ["Category types"],
+          summary: "Get category type by ID",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "Category type", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            404: { description: "Category type not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        put: {
+          tags: ["Category types"],
+          summary: "Update category type",
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name"],
+                  properties: { name: { type: "string" } },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Category type updated", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            400: { description: "Bad request", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        delete: {
+          tags: ["Category types"],
+          summary: "Delete category type",
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "Category type deleted", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Category type not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/module-names": {
+        get: {
+          tags: ["Module names"],
+          summary: "List module names",
+          description: "All rows from module name master. Supports optional pagination and category type filtering.",
+          parameters: [
+            { name: "category_type_id", in: "query", schema: { type: "integer" }, description: "Optional category type filter" },
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number" },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size" },
+          ],
+          responses: {
+            200: { description: "Module name rows", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+          },
+        },
+        post: {
+          tags: ["Module names"],
+          summary: "Create module name",
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name", "category_type_id"],
+                  properties: {
+                    name: { type: "string" },
+                    category_type_id: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: "Module name created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            400: { description: "Bad request", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/module-names/{id}": {
+        get: {
+          tags: ["Module names"],
+          summary: "Get module name by ID",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "Module name", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            404: { description: "Module name not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        put: {
+          tags: ["Module names"],
+          summary: "Update module name",
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name", "category_type_id"],
+                  properties: {
+                    name: { type: "string" },
+                    category_type_id: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Module name updated", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            400: { description: "Bad request", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        delete: {
+          tags: ["Module names"],
+          summary: "Delete module name",
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "Module name deleted", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
+            401: { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Module name not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
       "/api/tags-master": {
         get: {
           tags: ["Tags master"],
           summary: "List tags",
-          description: "All rows from dms_tags_master, ordered by name.",
+          description: "All rows from dms_tags_master. Supports optional pagination and partial name filter.",
+          parameters: [
+            { name: "name", in: "query", schema: { type: "string" }, description: "Optional partial match for tag name" },
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page number" },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1 }, description: "Page size" },
+          ],
           responses: {
             200: { description: "List of tags", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessResponse" } } } },
           },
@@ -443,6 +685,7 @@ const options = {
                   properties: {
                     title: { type: "string" },
                     description: { type: "string" },
+                    doc_id: { type: "string", description: "Business document identifier" },
                     tags: { type: "string" },
                     category_id: { type: "integer" },
                     distribution: { type: "string", description: "Team / distribution" },
@@ -542,6 +785,7 @@ const options = {
                   properties: {
                     title: { type: "string" },
                     description: { type: "string" },
+                    doc_id: { type: "string", nullable: true },
                     tags: { type: "string" },
                     category_id: { type: "integer", nullable: true },
                     distribution: { type: "string", nullable: true },
