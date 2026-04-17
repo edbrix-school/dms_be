@@ -121,6 +121,7 @@ function mergeSearchFields(body) {
     tags: pick("tags"),
     distribution: pick("distribution"),
     media_type: pick("media_type"),
+    file_type: pick("file_type"),
     asset_type: pick("asset_type"),
     doc_id: pick("doc_id"),
     doc_ids: pick("doc_ids"),
@@ -136,6 +137,7 @@ function hasAnyDbSearchCriterion(f) {
     nonEmpty(f.tags) ||
     nonEmpty(f.distribution) ||
     nonEmpty(f.media_type) ||
+    nonEmpty(f.file_type) ||
     nonEmpty(f.asset_type) ||
     parseDocIdFilters(f.doc_id, f.doc_ids).length > 0 ||
     (f.category_id != null && f.category_id !== "") ||
@@ -178,6 +180,7 @@ async function searchDocuments(body, user) {
     tags: f.tags,
     distribution: f.distribution,
     media_type: f.media_type,
+    file_type: f.file_type,
     asset_type: f.asset_type,
     doc_id_in: effectiveDocIdIn,
     document_id_in: documentIdIn,

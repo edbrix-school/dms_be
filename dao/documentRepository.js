@@ -47,6 +47,48 @@ const FILE_LIST_ATTRS = [
   "created_at",
 ];
 
+const IMAGE_FILE_TYPES = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "heic", "ico"];
+
+function buildFileFilter(mediaType, fileType, assetType) {
+  const where = {};
+  const isOtherBucket = mediaType === "other" || fileType === "other";
+
+  if (isOtherBucket) {
+    where[Op.not] = {
+      [Op.or]: [
+        { media_type: "image" },
+        { file_type: { [Op.in]: [...IMAGE_FILE_TYPES, "pdf"] } },
+      ],
+    };
+  } else if (mediaType) {
+    if (mediaType === "image") {
+      where[Op.or] = [
+        { media_type: "image" },
+        { file_type: { [Op.in]: IMAGE_FILE_TYPES } },
+      ];
+    } else {
+      where.media_type = mediaType;
+    }
+  }
+
+  if (fileType && !isOtherBucket) {
+    if (fileType === "image") {
+      where[Op.or] = [
+        { media_type: "image" },
+        { file_type: { [Op.in]: IMAGE_FILE_TYPES } },
+      ];
+    } else {
+      where.file_type = fileType;
+    }
+  }
+
+  if (assetType) {
+    where.asset_type = { [Op.iLike]: `%${assetType}%` };
+  }
+
+  return where;
+}
+
 async function createDocument(data, options = {}) {
   const doc = await Document.create({
     title: data.title,
@@ -183,6 +225,7 @@ async function searchDocuments(filters = {}) {
     tags,
     distribution,
     media_type,
+    file_type,
     asset_type,
     document_id_in,
     doc_id_in,
@@ -213,10 +256,10 @@ async function searchDocuments(filters = {}) {
 
   const fileWhere = {};
   const mt = trimOrEmpty(media_type);
+  const ft = trimOrEmpty(file_type);
   const at = trimOrEmpty(asset_type);
-  if (mt) fileWhere.media_type = mt;
-  if (at) fileWhere.asset_type = { [Op.iLike]: `%${at}%` };
-  const hasFileFilter = Object.keys(fileWhere).length > 0;
+  Object.assign(fileWhere, buildFileFilter(mt, ft, at));
+  const hasFileFilter = Boolean(mt || ft || at);
 
   const fileInclude = {
     model: DocumentFile,
