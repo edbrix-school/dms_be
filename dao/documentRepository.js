@@ -123,19 +123,35 @@ async function createDocumentFile(data, options = {}) {
   return row.toJSON();
 }
 
+async function getDocumentFileByFileId(fileId, options = {}) {
+  const row = await DocumentFile.findOne({
+    where: { file_id: fileId },
+    ...options,
+  });
+  return row ? row.toJSON() : null;
+}
+
 async function getById(id, options = {}) {
+  const includeFiles = options.includeFiles !== false;
+  const queryOptions = { ...options };
+  delete queryOptions.includeFiles;
   const include = [
     { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name", "email"] },
     { model: Category, as: "category", attributes: ["category_id", "name"] },
   ];
-  if (options.includeFiles !== false) {
+  if (includeFiles) {
     include.push({ model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS });
   }
   const doc = await Document.findByPk(id, {
+    ...queryOptions,
     include,
     attributes: { exclude: [] },
   });
   return doc ? doc.toJSON() : null;
+}
+
+async function runInTransaction(work) {
+  return Document.sequelize.transaction(async (transaction) => work(transaction));
 }
 
 async function list(filters = {}) {
@@ -337,6 +353,7 @@ async function getFilesByDistributionAndTypeRaw() {
 module.exports = {
   createDocument,
   createDocumentFile,
+  getDocumentFileByFileId,
   getById,
   list,
   getDocumentFileById,
@@ -350,4 +367,5 @@ module.exports = {
   deleteDocument,
   getFileStatsSummaryRaw,
   getFilesByDistributionAndTypeRaw,
+  runInTransaction,
 };

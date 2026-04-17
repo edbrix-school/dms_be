@@ -43,54 +43,83 @@ function parseDocIdFilters(...values) {
 }
 
 async function createDocument(req, body, userId) {
-  const doc = await documentRepository.createDocument({
-    title: body.title,
-    description: body.description || null,
-    doc_id: body.doc_id,
-    tags: body.tags || null,
-    category_id: body.category_id || null,
-    created_by: userId,
-    cover_image: body.cover_image || null,
-    distribution: body.distribution,
-  });
   const files = req.files && (req.files.files || req.files["files"]);
   const fileList = Array.isArray(files) ? files : files ? [files] : [];
   const assetTypes = parseStringArray(body.file_asset_types);
   const mediaOverrides = parseStringArray(body.file_media_types);
   const defaultAssetType =
     body.asset_type != null && String(body.asset_type).trim() !== "" ? String(body.asset_type).trim() : null;
+  const newlyUploadedFileIds = [];
+  let createdDocumentId = null;
 
-  for await (const [i, file] of fileList.entries()) {
-    try {
-      const entry = await alfrescoService.uploadFile(file, {
-        title: body.title,
-        description: body.description,
-      });
-      const ext = (file.originalname || "").split(".").pop() || "";
-      const overrideMedia = mediaOverrides[i] != null && String(mediaOverrides[i]).trim();
-      const mediaType = overrideMedia || inferMediaType(file.mimetype, file.originalname);
-      let assetType = defaultAssetType;
-      if (assetTypes[i] != null && String(assetTypes[i]).trim() !== "") {
-        assetType = String(assetTypes[i]).trim();
+  try {
+    await documentRepository.runInTransaction(async (transaction) => {
+      const doc = await documentRepository.createDocument(
+        {
+          title: body.title,
+          description: body.description || null,
+          doc_id: body.doc_id,
+          tags: body.tags || null,
+          category_id: body.category_id || null,
+          created_by: userId,
+          cover_image: body.cover_image || null,
+          distribution: body.distribution,
+        },
+        { transaction }
+      );
+      createdDocumentId = doc.document_id;
+
+      for await (const [i, file] of fileList.entries()) {
+        const entry = await alfrescoService.uploadFile(file, {
+          title: body.title,
+          description: body.description,
+        });
+        const existingFile = await documentRepository.getDocumentFileByFileId(entry.id, { transaction });
+        if (existingFile) {
+          throw new Error(
+            `Duplicate file upload is not allowed. File "${file.originalname}" already exists in document ${existingFile.document_id}.`
+          );
+        }
+        newlyUploadedFileIds.push(entry.id);
+
+        const ext = (file.originalname || "").split(".").pop() || "";
+        const overrideMedia = mediaOverrides[i] != null && String(mediaOverrides[i]).trim();
+        const mediaType = overrideMedia || inferMediaType(file.mimetype, file.originalname);
+        let assetType = defaultAssetType;
+        if (assetTypes[i] != null && String(assetTypes[i]).trim() !== "") {
+          assetType = String(assetTypes[i]).trim();
+        }
+        await documentRepository.createDocumentFile(
+          {
+            document_id: doc.document_id,
+            file_name: file.originalname || "file",
+            file_type: ext,
+            media_type: mediaType,
+            asset_type: assetType,
+            file_size: file.size != null ? file.size : null,
+            file_id: entry.id,
+            folder_id: body.folder_id || null,
+            is_private: body.is_private,
+          },
+          { transaction }
+        );
       }
-      await documentRepository.createDocumentFile({
-        document_id: doc.document_id,
-        file_name: file.originalname || "file",
-        file_type: ext,
-        media_type: mediaType,
-        asset_type: assetType,
-        file_size: file.size != null ? file.size : null,
-        file_id: entry.id,
-        folder_id: body.folder_id || null,
-        is_private: body.is_private,
-      });
-    } finally {
+    });
+  } catch (err) {
+    for (const fileId of newlyUploadedFileIds) {
+      try {
+        await alfrescoService.deleteFile(fileId);
+      } catch (_) {}
+    }
+    throw err;
+  } finally {
+    for (const file of fileList) {
       try {
         if (file.path) await fs.unlink(file.path);
       } catch (_) {}
     }
   }
-  return documentRepository.getById(doc.document_id);
+  return createdDocumentId ? documentRepository.getById(createdDocumentId) : null;
 }
 
 async function listDocuments(filters, user) {
