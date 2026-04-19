@@ -1,6 +1,8 @@
 const fs = require("fs").promises;
 const documentRepository = require("../dao/documentRepository");
-const alfrescoService = require("../common/alfrescoService");
+const documentStorage = require("../common/documentStorage");
+const elasticsearchService = require("../common/elasticsearchService");
+const { extractText } = require("../common/extractText");
 const { inferMediaType } = require("../common/fileMediaType");
 
 function parseStringArray(raw) {
@@ -50,6 +52,7 @@ async function createDocument(req, body, userId) {
   const defaultAssetType =
     body.asset_type != null && String(body.asset_type).trim() !== "" ? String(body.asset_type).trim() : null;
   const newlyUploadedFileIds = [];
+  const esIndexRows = [];
   let createdDocumentId = null;
 
   try {
@@ -70,9 +73,10 @@ async function createDocument(req, body, userId) {
       createdDocumentId = doc.document_id;
 
       for await (const [i, file] of fileList.entries()) {
-        const entry = await alfrescoService.uploadFile(file, {
+        const entry = await documentStorage.uploadFile(file, {
           title: body.title,
           description: body.description,
+          documentId: doc.document_id,
         });
         const existingFile = await documentRepository.getDocumentFileByFileId(entry.id, { transaction });
         if (existingFile) {
@@ -89,10 +93,11 @@ async function createDocument(req, body, userId) {
         if (assetTypes[i] != null && String(assetTypes[i]).trim() !== "") {
           assetType = String(assetTypes[i]).trim();
         }
+        const fileName = file.originalname || "file";
         await documentRepository.createDocumentFile(
           {
             document_id: doc.document_id,
-            file_name: file.originalname || "file",
+            file_name: fileName,
             file_type: ext,
             media_type: mediaType,
             asset_type: assetType,
@@ -103,12 +108,33 @@ async function createDocument(req, body, userId) {
           },
           { transaction }
         );
+        if (documentStorage.getBackend() === "s3") {
+          const content = await extractText({
+            path: file.path,
+            mimetype: file.mimetype,
+            originalname: file.originalname,
+          });
+          esIndexRows.push({
+            file_id: entry.id,
+            document_id: doc.document_id,
+            title: body.title,
+            description: body.description,
+            tags: body.tags,
+            file_name: fileName,
+            content,
+          });
+        }
       }
     });
+    if (documentStorage.getBackend() === "s3" && esIndexRows.length > 0) {
+      for (const row of esIndexRows) {
+        await elasticsearchService.indexFile(row);
+      }
+    }
   } catch (err) {
     for (const fileId of newlyUploadedFileIds) {
       try {
-        await alfrescoService.deleteFile(fileId);
+        await documentStorage.deleteFile(fileId);
       } catch (_) {}
     }
     throw err;
@@ -133,7 +159,9 @@ async function getDocumentById(id) {
 async function getFileContent(documentId, fileId) {
   const fileRow = await documentRepository.getDocumentFileByDocumentAndFileId(documentId, fileId);
   if (!fileRow) return null;
-  const { filename, buffer } = await alfrescoService.downloadFile(fileRow.file_id);
+  const { filename, buffer } = await documentStorage.downloadFile(fileRow.file_id, {
+    preferredFilename: fileRow.file_name,
+  });
   return { ...fileRow, filename, buffer };
 }
 
@@ -179,10 +207,10 @@ async function searchDocuments(body, user) {
   const docIdIn = parseDocIdFilters(f.doc_id, f.doc_ids);
   const effectiveDocIdIn = docIdIn.length > 0 ? docIdIn : null;
   const searchText = (f.search_text != null ? String(f.search_text) : "").trim();
-  const hasAlfresco = !!searchText;
+  const hasFullText = !!searchText;
   const hasDb = hasAnyDbSearchCriterion({ ...f, doc_id: effectiveDocIdIn });
 
-  if (!hasDb && !hasAlfresco) {
+  if (!hasDb && !hasFullText) {
     return documentRepository.listAllWithoutSearch({
       page: f.page || 1,
       limit: f.limit || 20,
@@ -191,9 +219,9 @@ async function searchDocuments(body, user) {
   }
 
   let documentIdIn = null;
-  if (hasAlfresco) {
-    const alfrescoIds = await alfrescoService.search(searchText);
-    documentIdIn = await documentRepository.getDocumentIdsByAlfrescoFileIds(alfrescoIds);
+  if (hasFullText) {
+    const storageIds = await documentStorage.searchFullText(searchText);
+    documentIdIn = await documentRepository.getDocumentIdsByAlfrescoFileIds(storageIds);
     if (documentIdIn.length === 0) {
       return { rows: [], count: 0 };
     }
@@ -226,16 +254,31 @@ async function updateDocument(id, body, userId) {
     distribution: body.distribution,
     updated_by: userId,
   });
-  return documentRepository.getById(id);
+  const doc = await documentRepository.getById(id);
+  if (documentStorage.getBackend() === "s3") {
+    await elasticsearchService.updateMetadataByDocumentId(id, {
+      title: doc.title,
+      description: doc.description,
+      tags: doc.tags,
+    });
+  }
+  return doc;
 }
 
 async function deleteDocument(id) {
   const files = await documentRepository.getDocumentFilesByDocumentId(id);
   for (const f of files) {
     try {
-      await alfrescoService.deleteFile(f.file_id);
+      await documentStorage.deleteFile(f.file_id);
     } catch (err) {
-      console.error("Alfresco delete error for", f.file_id, err.message);
+      console.error("Storage delete error for", f.file_id, err.message);
+    }
+  }
+  if (documentStorage.getBackend() === "s3") {
+    try {
+      await elasticsearchService.deleteByDocumentId(id);
+    } catch (err) {
+      console.error("Elasticsearch delete error for document", id, err.message);
     }
   }
   await documentRepository.deleteDocument(id);
