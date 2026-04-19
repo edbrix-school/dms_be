@@ -200,9 +200,12 @@ const options = {
         SearchRequest: {
           type: "object",
           description:
-            "Combine any filters (AND). With search_text, Alfresco hits are intersected with DB filters. You may nest the same keys under search_fields.",
+            "Combine any filters (AND). With search_text, full-text hits (Alfresco or Elasticsearch, depending on STORAGE_BACKEND) are intersected with DB filters. You may nest the same keys under search_fields.",
           properties: {
-            search_text: { type: "string", description: "Full-text via Alfresco (optional)" },
+            search_text: {
+              type: "string",
+              description: "Full-text search (Alfresco when STORAGE_BACKEND=alfresco, Elasticsearch when STORAGE_BACKEND=s3)",
+            },
             title: { type: "string", description: "Partial match on document title" },
             description: { type: "string" },
             tags: { type: "string" },
@@ -712,7 +715,7 @@ const options = {
           tags: ["Documents"],
           summary: "Search documents",
           description:
-            "Filter by multiple DB fields (AND). Optional search_text queries Alfresco; results are intersected with DB filters. Empty body lists by category_id only if provided, else all (paginated).",
+            "Filter by multiple DB fields (AND). Optional search_text uses full-text search (Alfresco or Elasticsearch per deployment); results are intersected with DB filters. Empty body lists by category_id only if provided, else all (paginated).",
           security: [{ bearerAuth: [] }],
           requestBody: {
             content: {
