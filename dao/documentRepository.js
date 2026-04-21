@@ -348,6 +348,14 @@ async function getDocumentFilesByDocumentId(documentId) {
   return files.map((f) => f.toJSON());
 }
 
+async function deleteDocumentFilesByDocumentId(documentId, options = {}) {
+  await DocumentFile.destroy({
+    where: { document_id: documentId },
+    ...options,
+  });
+  return true;
+}
+
 async function deleteDocument(id) {
   const files = await DocumentFile.findAll({ where: { document_id: id } });
   for (const f of files) {
@@ -382,6 +390,7 @@ module.exports = {
   searchDocuments,
   updateDocument,
   getDocumentFilesByDocumentId,
+  deleteDocumentFilesByDocumentId,
   deleteDocument,
   getFileStatsSummaryRaw,
   getFilesByDistributionAndTypeRaw,

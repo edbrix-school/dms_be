@@ -17,7 +17,7 @@ router.post(
     if (Object.keys(errors).length > 0) {
       return res.status(422).json(Util.getErrorResponse(errors));
     }
-    const userId = req?.user?.user_id;
+    const userId = req?.user?.user_id || 5;
     req.body.created_by = userId;
     try {
       const document = await documentService.createDocument(req, req.body, userId);
@@ -97,7 +97,14 @@ router.get("/:id/files/:fileId/open", verifyAuth, async (req, res) => {
   try {
     const result = await documentService.getFileContent(req.params.id, req.params.fileId);
     if (!result) return res.status(404).json({ success: false, message: "File not found." });
-    res.setHeader("Content-Disposition", `inline; filename="${result.filename}"`);
+    const isEmailFile =
+      String(result.file_type || "").toLowerCase() === "eml" ||
+      String(result.filename || "").toLowerCase().endsWith(".eml") ||
+      String(result.media_type || "").toLowerCase() === "message/rfc822";
+    res.setHeader(
+      "Content-Disposition",
+      `${isEmailFile ? "attachment" : "inline"}; filename="${result.filename}"`
+    );
     res.setHeader("Content-Type", result.media_type || "application/octet-stream");
     return res.send(result.buffer);
   } catch (err) {
@@ -105,18 +112,24 @@ router.get("/:id/files/:fileId/open", verifyAuth, async (req, res) => {
   }
 });
 
-router.put("/:id", verifyAuth, async (req, res) => {
+router.put(
+  "/:id",
+  verifyAuth,
+  upload.fields([{ name: "files", maxCount: 10 }, { name: "cover_image", maxCount: 1 }]),
+  async (req, res) => {
   const errors = Util.validate_prams(req.body, { title: "ANY" }, { title: "Title" });
   if (Object.keys(errors).length > 0) {
     return res.status(422).json(Util.getErrorResponse(errors));
   }
   try {
-    const document = await documentService.updateDocument(req.params.id, req.body, req.user.user_id);
+    req.body.files = req.files;
+    const document = await documentService.updateDocument(req.params.id, req.body, 5); //req.user.user_id
     return res.status(200).json(Util.getSuccessResponse(document, "Document updated."));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
   }
-});
+}
+);
 
 router.delete("/:id", verifyAuth, async (req, res) => {
   try {
