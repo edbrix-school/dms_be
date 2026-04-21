@@ -100,6 +100,8 @@ async function createDocument(data, options = {}) {
     updated_by: data.updated_by || null,
     cover_image: data.cover_image || null,
     distribution: data.distribution != null && String(data.distribution).trim() !== "" ? String(data.distribution).trim() : null,
+    module_name: data.module_name != null && String(data.module_name).trim() !== "" ? String(data.module_name).trim() : null,
+    screen_name: data.screen_name != null && String(data.screen_name).trim() !== "" ? String(data.screen_name).trim() : null,
   }, options);
   return doc.toJSON();
 }
@@ -137,7 +139,7 @@ async function getById(id, options = {}) {
   delete queryOptions.includeFiles;
   const include = [
     { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name", "email"] },
-    { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
+    { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
   ];
   if (includeFiles) {
     include.push({ model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS });
@@ -162,7 +164,7 @@ async function list(filters = {}) {
     where,
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
       { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type", "media_type", "asset_type", "file_size"] },
     ],
     limit: Math.min(limit, 100),
@@ -191,7 +193,7 @@ async function getByAlfrescoIds(alfrescoIds, filters = {}) {
   if (!alfrescoIds || alfrescoIds.length === 0) return { rows: [], count: 0 };
   const where = { file_id: { [Op.in]: alfrescoIds } };
   const include = [
-    { model: Document, as: "document", include: [{ model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] }, { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] }] },
+    { model: Document, as: "document", include: [{ model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] }, { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] }] },
   ];
   const files = await DocumentFile.findAll({ where, include });
   const docIds = [...new Set(files.map((f) => f.document_id))];
@@ -199,7 +201,7 @@ async function getByAlfrescoIds(alfrescoIds, filters = {}) {
     where: { document_id: { [Op.in]: docIds } },
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
       { model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS },
     ],
   });
@@ -240,6 +242,8 @@ async function searchDocuments(filters = {}) {
     description,
     tags,
     distribution,
+    module_name,
+    screen_name,
     media_type,
     file_type,
     asset_type,
@@ -269,6 +273,8 @@ async function searchDocuments(filters = {}) {
   addILike("description", description);
   addILike("tags", tags);
   addILike("distribution", distribution);
+  addILike("module_name", module_name);
+  addILike("screen_name", screen_name);
 
   const fileWhere = {};
   const mt = trimOrEmpty(media_type);
@@ -293,7 +299,7 @@ async function searchDocuments(filters = {}) {
     col: Document.primaryKeyAttribute || "document_id",
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "module_name", "screen_name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
       fileInclude,
     ],
     limit: perPage,
@@ -319,6 +325,18 @@ async function updateDocument(id, data) {
     patch.distribution =
       data.distribution != null && String(data.distribution).trim() !== ""
         ? String(data.distribution).trim()
+        : null;
+  }
+  if (data.module_name !== undefined) {
+    patch.module_name =
+      data.module_name != null && String(data.module_name).trim() !== ""
+        ? String(data.module_name).trim()
+        : null;
+  }
+  if (data.screen_name !== undefined) {
+    patch.screen_name =
+      data.screen_name != null && String(data.screen_name).trim() !== ""
+        ? String(data.screen_name).trim()
         : null;
   }
   await Document.update(patch, { where: { document_id: id } });

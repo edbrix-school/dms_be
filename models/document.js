@@ -47,6 +47,14 @@ const Document = db.sequelize.define(
       allowNull: true,
       comment: "Team or org unit that uploaded / owns distribution",
     },
+    module_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    screen_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: true,

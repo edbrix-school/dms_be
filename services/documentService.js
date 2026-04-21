@@ -64,6 +64,8 @@ async function createDocument(req, body, userId) {
           created_by: userId,
           cover_image: body.cover_image || null,
           distribution: body.distribution,
+          module_name: body.module_name,
+          screen_name: body.screen_name,
         },
         { transaction }
       );
@@ -149,6 +151,8 @@ function mergeSearchFields(body) {
     description: pick("description"),
     tags: pick("tags"),
     distribution: pick("distribution"),
+    module_name: pick("module_name"),
+    screen_name: pick("screen_name"),
     media_type: pick("media_type"),
     file_type: pick("file_type"),
     asset_type: pick("asset_type"),
@@ -165,6 +169,8 @@ function hasAnyDbSearchCriterion(f) {
     nonEmpty(f.description) ||
     nonEmpty(f.tags) ||
     nonEmpty(f.distribution) ||
+    nonEmpty(f.module_name) ||
+    nonEmpty(f.screen_name) ||
     nonEmpty(f.media_type) ||
     nonEmpty(f.file_type) ||
     nonEmpty(f.asset_type) ||
@@ -208,6 +214,8 @@ async function searchDocuments(body, user) {
     description: f.description,
     tags: f.tags,
     distribution: f.distribution,
+    module_name: f.module_name,
+    screen_name: f.screen_name,
     media_type: f.media_type,
     file_type: f.file_type,
     asset_type: f.asset_type,
@@ -224,6 +232,8 @@ async function updateDocument(id, body, userId) {
     tags: body.tags,
     category_id: body.category_id,
     distribution: body.distribution,
+    module_name: body.module_name,
+    screen_name: body.screen_name,
     updated_by: userId,
   });
   return documentRepository.getById(id);

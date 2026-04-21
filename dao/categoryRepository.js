@@ -26,12 +26,6 @@ function buildTree(arr) {
   return roots;
 }
 
-async function validateCategoryTypeAndModule(category_type_id) {
-  if (category_type_id == null) {
-    throw new Error("category_type_id is required together.");
-  }
-}
-
 async function list(flat = true, pagination = {}, filters = {}) {
   const order = [["sort_order", "ASC"], ["category_id", "DESC"]];
   const where = {};
@@ -85,7 +79,6 @@ async function create(data) {
   }
 
   const categoryTypeId = data.category_type_id != null ? Number(data.category_type_id) : null;
-  await validateCategoryTypeAndModule(categoryTypeId);
 
   const c = await Category.create({
     name: trimmedName,
@@ -93,8 +86,6 @@ async function create(data) {
     parent_id: data.parent_id || null,
     category_type_id: categoryTypeId,
     doc_id: data.doc_id != null ? String(data.doc_id).trim() || null : null,
-    module_name: data.module_name != null ? String(data.module_name).trim() || null : null,
-    screen_name: data.screen_name != null ? String(data.screen_name).trim() || null : null,
     sort_order: data.sort_order != null ? data.sort_order : 0,
   });
   return getById(c.category_id);
@@ -111,7 +102,6 @@ async function update(id, data) {
   }
 
   const categoryTypeId = data.category_type_id != null ? Number(data.category_type_id) : null;
-  await validateCategoryTypeAndModule(categoryTypeId);
 
   await Category.update(
     {
@@ -120,8 +110,6 @@ async function update(id, data) {
       parent_id: data.parent_id || null,
       category_type_id: categoryTypeId,
       doc_id: data.doc_id != null ? String(data.doc_id).trim() || null : null,
-      module_name: data.module_name != null ? String(data.module_name).trim() || null : null,
-      screen_name: data.screen_name != null ? String(data.screen_name).trim() || null : null,
       sort_order: data.sort_order != null ? data.sort_order : 0,
     },
     { where: { category_id: id } }

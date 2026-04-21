@@ -23,7 +23,7 @@ This document provides technical details derived from the DMS API codebase for i
 
 ### 2.1 Core tables
 
-- **`dms_documents`** – Document metadata: `document_id`, `title`, `description`, `tags`, `category_id`, `distribution` (team / distribution), `created_by`, `updated_by`, `cover_image`, `created_at`, `updated_at`.
+- **`dms_documents`** – Document metadata: `document_id`, `title`, `description`, `tags`, `category_id`, `distribution` (team / distribution), `module_name`, `screen_name`, `created_by`, `updated_by`, `cover_image`, `created_at`, `updated_at`.
 - **`dms_document_files`** – File records: `document_file_id`, `document_id`, `file_name`, `file_type` (extension), `media_type` (`image` \| `video` \| `audio` \| `document` \| `other`), `asset_type`, `file_size` (bytes), `file_id` (Alfresco node ID), `folder_id`, `is_private`, `created_at`.
 - **`dms_categories`** – Categories: `category_id`, `name`, `description`, `parent_id`, `sort_order`, `created_at`, `updated_at`. Supports hierarchy via `parent_id`.
 - **`dms_users`** – Users: `user_id`, `email`, `password_hash`, `first_name`, `last_name`, `role_id`, `is_blocked`, `created_at`, `updated_at`.
@@ -45,7 +45,7 @@ This document provides technical details derived from the DMS API codebase for i
 - **Create:** `createDocument`, `createDocumentFile` – persist document metadata and file records.
 - **Read:** `getById` (with optional `includeFiles`), `list` (paginated, filter by `category_id`, sort/order), `getDocumentFileById`, `getDocumentFileByDocumentAndFileId`, `getDocumentFilesByDocumentId`.
 - **List by Alfresco IDs:** `getByAlfrescoIds` – given Alfresco node IDs (e.g. from search), returns matching documents with optional `category_id` filter.
-- **Update:** `updateDocument` – title, description, tags, category_id, updated_by.
+- **Update:** `updateDocument` – title, description, tags, category_id, distribution, module_name, screen_name, updated_by.
 - **Delete:** `deleteDocument` – deletes all related `DocumentFile` rows then the document.
 - **Pagination:** `list` uses `page`, `limit` (max 100), `sort`, `order` (default `created_at` DESC).
 
