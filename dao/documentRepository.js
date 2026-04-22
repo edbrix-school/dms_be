@@ -164,7 +164,7 @@ async function list(filters = {}) {
     where,
     include: [
       { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "description"] },
       { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type", "media_type", "asset_type", "file_size"] },
     ],
     limit: Math.min(limit, 100),
