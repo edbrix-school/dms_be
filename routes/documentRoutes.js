@@ -53,7 +53,7 @@ router.post(
     if (Object.keys(errors).length > 0) {
       return res.status(422).json(Util.getErrorResponse(errors));
     }
-    const userId = req?.user?.user_id || 5;
+    const userId = req?.user?.user_id;
     req.body.created_by = userId;
     try {
       const document = await documentService.createDocument(req, req.body, userId);
@@ -177,7 +177,7 @@ router.put(
   }
   try {
     req.body.files = req.files;
-    const document = await documentService.updateDocument(req.params.id, req.body, 5); //req.user.user_id
+    const document = await documentService.updateDocument(req.params.id, req.body, req.user.user_id);
     return res.status(200).json(Util.getSuccessResponse(document, "Document updated."));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
