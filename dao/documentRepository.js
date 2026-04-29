@@ -94,6 +94,10 @@ async function createDocument(data, options = {}) {
     title: data.title,
     description: data.description || null,
     doc_id: data.doc_id != null && String(data.doc_id).trim() !== "" ? String(data.doc_id).trim() : null,
+    doc_key_poid:
+      data.doc_key_poid != null && String(data.doc_key_poid).trim() !== ""
+        ? String(data.doc_key_poid).trim()
+        : null,
     tags: data.tags || null,
     category_id: data.category_id || null,
     created_by: data.created_by,
@@ -320,6 +324,12 @@ async function updateDocument(id, data) {
   };
   if (data.doc_id !== undefined) {
     patch.doc_id = data.doc_id != null && String(data.doc_id).trim() !== "" ? String(data.doc_id).trim() : null;
+  }
+  if (data.doc_key_poid !== undefined) {
+    patch.doc_key_poid =
+      data.doc_key_poid != null && String(data.doc_key_poid).trim() !== ""
+        ? String(data.doc_key_poid).trim()
+        : null;
   }
   if (data.distribution !== undefined) {
     patch.distribution =
