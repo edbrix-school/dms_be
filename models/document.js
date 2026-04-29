@@ -1,6 +1,5 @@
 const { DataTypes } = require("sequelize");
 const db = require("../config/db");
-const User = require("./user");
 
 const Document = db.sequelize.define(
   "dms_documents",
@@ -15,6 +14,14 @@ const Document = db.sequelize.define(
       allowNull: false,
     },
     description: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    doc_id: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    doc_key_poid: {
       type: DataTypes.STRING,
       allowNull: true,
     },
@@ -43,6 +50,14 @@ const Document = db.sequelize.define(
       allowNull: true,
       comment: "Team or org unit that uploaded / owns distribution",
     },
+    module_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    screen_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: true,
@@ -55,7 +70,5 @@ const Document = db.sequelize.define(
   { tableName: "dms_documents", timestamps: true, createdAt: "created_at", updatedAt: "updated_at" }
 );
 
-Document.belongsTo(User, { foreignKey: "created_by", as: "creator" });
-Document.belongsTo(User, { foreignKey: "updated_by", as: "updater" });
 module.exports = Document;
 Document.hasMany(require("./documentFile"), { foreignKey: "document_id", as: "documentFiles" });

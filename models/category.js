@@ -21,6 +21,14 @@ const Category = db.sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    category_type_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    doc_id: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     sort_order: {
       type: DataTypes.INTEGER,
       allowNull: true,
