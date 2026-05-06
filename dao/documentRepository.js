@@ -1,7 +1,6 @@
 const { Op, QueryTypes } = require("sequelize");
 const Document = require("../models/document");
 const DocumentFile = require("../models/documentFile");
-const User = require("../models/user");
 const Category = require("../models/category");
 
 const IS_IMAGE_SQL = `(
@@ -141,10 +140,7 @@ async function getById(id, options = {}) {
   const includeFiles = options.includeFiles !== false;
   const queryOptions = { ...options };
   delete queryOptions.includeFiles;
-  const include = [
-    { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name", "email"] },
-    { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
-  ];
+  const include = [{ model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] }];
   if (includeFiles) {
     include.push({ model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS });
   }
@@ -167,7 +163,6 @@ async function list(filters = {}) {
   const { rows, count } = await Document.findAndCountAll({
     where,
     include: [
-      { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
       { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "description"] },
       { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type", "media_type", "asset_type", "file_size"] },
     ],
@@ -197,14 +192,13 @@ async function getByAlfrescoIds(alfrescoIds, filters = {}) {
   if (!alfrescoIds || alfrescoIds.length === 0) return { rows: [], count: 0 };
   const where = { file_id: { [Op.in]: alfrescoIds } };
   const include = [
-    { model: Document, as: "document", include: [{ model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] }, { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] }] },
+    { model: Document, as: "document", include: [{ model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] }] },
   ];
   const files = await DocumentFile.findAll({ where, include });
   const docIds = [...new Set(files.map((f) => f.document_id))];
   const docs = await Document.findAll({
     where: { document_id: { [Op.in]: docIds } },
     include: [
-      { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
       { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
       { model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS },
     ],
@@ -302,7 +296,6 @@ async function searchDocuments(filters = {}) {
     distinct: true,
     col: Document.primaryKeyAttribute || "document_id",
     include: [
-      { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
       { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
       fileInclude,
     ],
