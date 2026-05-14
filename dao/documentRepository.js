@@ -105,6 +105,7 @@ async function createDocument(data, options = {}) {
     distribution: data.distribution != null && String(data.distribution).trim() !== "" ? String(data.distribution).trim() : null,
     module_name: data.module_name != null && String(data.module_name).trim() !== "" ? String(data.module_name).trim() : null,
     screen_name: data.screen_name != null && String(data.screen_name).trim() !== "" ? String(data.screen_name).trim() : null,
+    username: data.username != null && String(data.username).trim() !== "" ? String(data.username).trim() : null,
   }, options);
   return doc.toJSON();
 }
@@ -340,6 +341,12 @@ async function updateDocument(id, data) {
     patch.screen_name =
       data.screen_name != null && String(data.screen_name).trim() !== ""
         ? String(data.screen_name).trim()
+        : null;
+  }
+  if (data.username !== undefined) {
+    patch.username =
+      data.username != null && String(data.username).trim() !== ""
+        ? String(data.username).trim()
         : null;
   }
   await Document.update(patch, { where: { document_id: id } });

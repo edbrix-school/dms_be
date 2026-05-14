@@ -3,6 +3,26 @@ const documentRepository = require("../dao/documentRepository");
 const alfrescoService = require("../common/alfrescoService");
 const { inferMediaType } = require("../common/fileMediaType");
 
+function resolveUsername(user) {
+  if (!user) return null;
+  const candidates = [
+    user.username,
+    user.user_name,
+    user.preferred_username,
+    user.email,
+    user.sub,
+  ];
+  for (const c of candidates) {
+    if (c != null && String(c).trim() !== "") return String(c).trim();
+  }
+  return null;
+}
+
+function usernameFromBodyOrUser(body, user) {
+  if (body.username != null && String(body.username).trim() !== "") return String(body.username).trim();
+  return resolveUsername(user);
+}
+
 function parseStringArray(raw) {
   if (raw == null || raw === "") return [];
   if (Array.isArray(raw)) return raw.map((x) => (x == null ? "" : String(x)));
@@ -67,6 +87,7 @@ async function createDocument(req, body, userId) {
           distribution: body.distribution,
           module_name: body.module_name,
           screen_name: body.screen_name,
+          username: usernameFromBodyOrUser(body, req.user),
         },
         { transaction }
       );
@@ -225,7 +246,8 @@ async function searchDocuments(body, user) {
   });
 }
 
-async function updateDocument(id, body, userId) {
+async function updateDocument(id, body, user) {
+  const userId = user?.user_id;
   const files = body?.files && (body.files.files || body.files["files"]);
   const fileList = Array.isArray(files) ? files : files ? [files] : [];
   const assetTypes = parseStringArray(body.file_asset_types);
@@ -257,6 +279,7 @@ async function updateDocument(id, body, userId) {
         module_name: body.module_name,
         screen_name: body.screen_name,
         updated_by: userId,
+        ...(body.username !== undefined ? { username: body.username } : {}),
       });
 
       if (fileList.length > 0) {

@@ -177,7 +177,7 @@ router.put(
   }
   try {
     req.body.files = req.files;
-    const document = await documentService.updateDocument(req.params.id, req.body, req.user.user_id);
+    const document = await documentService.updateDocument(req.params.id, req.body, req.user);
     return res.status(200).json(Util.getSuccessResponse(document, "Document updated."));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });

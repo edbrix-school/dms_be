@@ -41,6 +41,10 @@ const Document = db.sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    username: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     cover_image: {
       type: DataTypes.STRING,
       allowNull: true,
