@@ -7,6 +7,7 @@ function resolveUsername(user) {
   if (!user) return null;
   const candidates = [
     user.username,
+    user.userName,
     user.user_name,
     user.preferred_username,
     user.email,
