@@ -3,6 +3,27 @@ const documentRepository = require("../dao/documentRepository");
 const alfrescoService = require("../common/alfrescoService");
 const { inferMediaType } = require("../common/fileMediaType");
 
+function resolveUsername(user) {
+  if (!user) return null;
+  const candidates = [
+    user.username,
+    user.userName,
+    user.user_name,
+    user.preferred_username,
+    user.email,
+    user.sub,
+  ];
+  for (const c of candidates) {
+    if (c != null && String(c).trim() !== "") return String(c).trim();
+  }
+  return null;
+}
+
+function usernameFromBodyOrUser(body, user) {
+  if (body.username != null && String(body.username).trim() !== "") return String(body.username).trim();
+  return resolveUsername(user);
+}
+
 function parseStringArray(raw) {
   if (raw == null || raw === "") return [];
   if (Array.isArray(raw)) return raw.map((x) => (x == null ? "" : String(x)));
@@ -14,54 +35,116 @@ function parseStringArray(raw) {
   }
 }
 
+function parseDocIdFilters(...values) {
+  const out = [];
+  for (const raw of values) {
+    if (raw == null || raw === "") continue;
+    if (Array.isArray(raw)) {
+      out.push(...raw);
+      continue;
+    }
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          out.push(...parsed);
+          continue;
+        }
+      } catch (_) {}
+      if (trimmed.includes(",")) {
+        out.push(...trimmed.split(","));
+        continue;
+      }
+    }
+    out.push(raw);
+  }
+  return [...new Set(out.map((v) => String(v).trim()).filter((v) => v !== ""))];
+}
+
 async function createDocument(req, body, userId) {
-  const doc = await documentRepository.createDocument({
-    title: body.title,
-    description: body.description || null,
-    tags: body.tags || null,
-    category_id: body.category_id || null,
-    created_by: userId,
-    cover_image: body.cover_image || null,
-    distribution: body.distribution,
-  });
   const files = req.files && (req.files.files || req.files["files"]);
   const fileList = Array.isArray(files) ? files : files ? [files] : [];
   const assetTypes = parseStringArray(body.file_asset_types);
   const mediaOverrides = parseStringArray(body.file_media_types);
   const defaultAssetType =
     body.asset_type != null && String(body.asset_type).trim() !== "" ? String(body.asset_type).trim() : null;
+  const newlyUploadedFileIds = [];
+  let createdDocumentId = null;
 
-  for await (const [i, file] of fileList.entries()) {
-    try {
-      const entry = await alfrescoService.uploadFile(file, {
-        title: body.title,
-        description: body.description,
-      });
-      const ext = (file.originalname || "").split(".").pop() || "";
-      const overrideMedia = mediaOverrides[i] != null && String(mediaOverrides[i]).trim();
-      const mediaType = overrideMedia || inferMediaType(file.mimetype, file.originalname);
-      let assetType = defaultAssetType;
-      if (assetTypes[i] != null && String(assetTypes[i]).trim() !== "") {
-        assetType = String(assetTypes[i]).trim();
+  try {
+    await documentRepository.runInTransaction(async (transaction) => {
+      const doc = await documentRepository.createDocument(
+        {
+          title: body.title,
+          description: body.description || null,
+          doc_id: body.doc_id,
+          doc_key_poid: body.doc_key_poid,
+          tags: body.tags || null,
+          category_id: body.category_id || null,
+          created_by: userId,
+          cover_image: body.cover_image || null,
+          distribution: body.distribution,
+          module_name: body.module_name,
+          screen_name: body.screen_name,
+          username: usernameFromBodyOrUser(body, req.user),
+        },
+        { transaction }
+      );
+      createdDocumentId = doc.document_id;
+
+      for await (const [i, file] of fileList.entries()) {
+        const entry = await alfrescoService.uploadFile(file, {
+          title: body.title,
+          description: body.description,
+        });
+        const existingFile = await documentRepository.getDocumentFileByFileId(entry.id, { transaction });
+        if (existingFile) {
+          throw new Error(
+            `Duplicate file upload is not allowed. File "${file.originalname}" already exists in document ${existingFile.document_id}.`
+          );
+        }
+        newlyUploadedFileIds.push(entry.id);
+
+        const ext = (file.originalname || "").split(".").pop() || "";
+        const overrideMedia = mediaOverrides[i] != null && String(mediaOverrides[i]).trim();
+        const mediaType = overrideMedia || inferMediaType(file.mimetype, file.originalname);
+        let assetType = defaultAssetType;
+        if (assetTypes[i] != null && String(assetTypes[i]).trim() !== "") {
+          assetType = String(assetTypes[i]).trim();
+        }
+        await documentRepository.createDocumentFile(
+          {
+            document_id: doc.document_id,
+            file_name: file.originalname || "file",
+            file_type: ext,
+            media_type: mediaType,
+            asset_type: assetType,
+            file_size: file.size != null ? file.size : null,
+            file_id: entry.id,
+            folder_id: body.folder_id || null,
+            is_private: body.is_private,
+          },
+          { transaction }
+        );
       }
-      await documentRepository.createDocumentFile({
-        document_id: doc.document_id,
-        file_name: file.originalname || "file",
-        file_type: ext,
-        media_type: mediaType,
-        asset_type: assetType,
-        file_size: file.size != null ? file.size : null,
-        file_id: entry.id,
-        folder_id: body.folder_id || null,
-        is_private: body.is_private,
-      });
-    } finally {
+    });
+  } catch (err) {
+    for (const fileId of newlyUploadedFileIds) {
+      try {
+        await alfrescoService.deleteFile(fileId);
+      } catch (_) {}
+    }
+    throw err;
+  } finally {
+    for (const file of fileList) {
       try {
         if (file.path) await fs.unlink(file.path);
       } catch (_) {}
     }
   }
-  return documentRepository.getById(doc.document_id);
+  return createdDocumentId ? documentRepository.getById(createdDocumentId) : null;
 }
 
 async function listDocuments(filters, user) {
@@ -91,8 +174,13 @@ function mergeSearchFields(body) {
     description: pick("description"),
     tags: pick("tags"),
     distribution: pick("distribution"),
+    module_name: pick("module_name"),
+    screen_name: pick("screen_name"),
     media_type: pick("media_type"),
+    file_type: pick("file_type"),
     asset_type: pick("asset_type"),
+    doc_id: pick("doc_id"),
+    doc_ids: pick("doc_ids"),
     search_text: pick("search_text"),
   };
 }
@@ -104,8 +192,12 @@ function hasAnyDbSearchCriterion(f) {
     nonEmpty(f.description) ||
     nonEmpty(f.tags) ||
     nonEmpty(f.distribution) ||
+    nonEmpty(f.module_name) ||
+    nonEmpty(f.screen_name) ||
     nonEmpty(f.media_type) ||
+    nonEmpty(f.file_type) ||
     nonEmpty(f.asset_type) ||
+    parseDocIdFilters(f.doc_id, f.doc_ids).length > 0 ||
     (f.category_id != null && f.category_id !== "") ||
     (f.created_by != null && f.created_by !== "")
   );
@@ -113,9 +205,11 @@ function hasAnyDbSearchCriterion(f) {
 
 async function searchDocuments(body, user) {
   const f = mergeSearchFields(body);
+  const docIdIn = parseDocIdFilters(f.doc_id, f.doc_ids);
+  const effectiveDocIdIn = docIdIn.length > 0 ? docIdIn : null;
   const searchText = (f.search_text != null ? String(f.search_text) : "").trim();
   const hasAlfresco = !!searchText;
-  const hasDb = hasAnyDbSearchCriterion(f);
+  const hasDb = hasAnyDbSearchCriterion({ ...f, doc_id: effectiveDocIdIn });
 
   if (!hasDb && !hasAlfresco) {
     return documentRepository.listAllWithoutSearch({
@@ -143,21 +237,107 @@ async function searchDocuments(body, user) {
     description: f.description,
     tags: f.tags,
     distribution: f.distribution,
+    module_name: f.module_name,
+    screen_name: f.screen_name,
     media_type: f.media_type,
+    file_type: f.file_type,
     asset_type: f.asset_type,
+    doc_id_in: effectiveDocIdIn,
     document_id_in: documentIdIn,
   });
 }
 
-async function updateDocument(id, body, userId) {
-  await documentRepository.updateDocument(id, {
-    title: body.title,
-    description: body.description,
-    tags: body.tags,
-    category_id: body.category_id,
-    distribution: body.distribution,
-    updated_by: userId,
-  });
+async function updateDocument(id, body, user) {
+  const userId = user?.user_id;
+  const files = body?.files && (body.files.files || body.files["files"]);
+  const fileList = Array.isArray(files) ? files : files ? [files] : [];
+  const assetTypes = parseStringArray(body.file_asset_types);
+  const mediaOverrides = parseStringArray(body.file_media_types);
+  const defaultAssetType =
+    body.asset_type != null && String(body.asset_type).trim() !== "" ? String(body.asset_type).trim() : null;
+
+  const existingFiles = fileList.length > 0 ? await documentRepository.getDocumentFilesByDocumentId(id) : [];
+  const newlyUploadedFileIds = [];
+
+  try {
+    for await (const [i, file] of fileList.entries()) {
+      const entry = await alfrescoService.uploadFile(file, {
+        title: body.title,
+        description: body.description,
+      });
+      newlyUploadedFileIds.push(entry.id);
+    }
+
+    await documentRepository.runInTransaction(async (transaction) => {
+      await documentRepository.updateDocument(id, {
+        title: body.title,
+        description: body.description,
+        doc_id: body.doc_id,
+        doc_key_poid: body.doc_key_poid,
+        tags: body.tags,
+        category_id: body.category_id,
+        distribution: body.distribution,
+        module_name: body.module_name,
+        screen_name: body.screen_name,
+        updated_by: userId,
+        ...(body.username !== undefined ? { username: body.username } : {}),
+      });
+
+      if (fileList.length > 0) {
+        await documentRepository.deleteDocumentFilesByDocumentId(id, { transaction });
+
+        for (const [i, file] of fileList.entries()) {
+          const ext = (file.originalname || "").split(".").pop() || "";
+          const overrideMedia = mediaOverrides[i] != null && String(mediaOverrides[i]).trim();
+          const mediaType = overrideMedia || inferMediaType(file.mimetype, file.originalname);
+          let assetType = defaultAssetType;
+          if (assetTypes[i] != null && String(assetTypes[i]).trim() !== "") {
+            assetType = String(assetTypes[i]).trim();
+          }
+
+          await documentRepository.createDocumentFile(
+            {
+              document_id: id,
+              file_name: file.originalname || "file",
+              file_type: ext,
+              media_type: mediaType,
+              asset_type: assetType,
+              file_size: file.size != null ? file.size : null,
+              file_id: newlyUploadedFileIds[i],
+              folder_id: body.folder_id || null,
+              is_private: body.is_private,
+            },
+            { transaction }
+          );
+        }
+      }
+    });
+
+    if (fileList.length > 0) {
+      for (const oldFile of existingFiles) {
+        try {
+          await alfrescoService.deleteFile(oldFile.file_id);
+        } catch (err) {
+          console.error("Alfresco delete error for", oldFile.file_id, err.message);
+        }
+      }
+    }
+  } catch (err) {
+    for (const fileId of newlyUploadedFileIds) {
+      try {
+        await alfrescoService.deleteFile(fileId);
+      } catch (_) {}
+    }
+    throw err;
+  } finally {
+    if (fileList.length > 0) {
+      for (const file of fileList) {
+        try {
+          if (file.path) await fs.unlink(file.path);
+        } catch (_) {}
+      }
+    }
+  }
   return documentRepository.getById(id);
 }
 

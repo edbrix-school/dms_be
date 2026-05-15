@@ -1,7 +1,6 @@
 const { Op, QueryTypes } = require("sequelize");
 const Document = require("../models/document");
 const DocumentFile = require("../models/documentFile");
-const User = require("../models/user");
 const Category = require("../models/category");
 
 const IS_IMAGE_SQL = `(
@@ -47,21 +46,71 @@ const FILE_LIST_ATTRS = [
   "created_at",
 ];
 
-async function createDocument(data) {
+const IMAGE_FILE_TYPES = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "heic", "ico"];
+
+function buildFileFilter(mediaType, fileType, assetType) {
+  const where = {};
+  const isOtherBucket = mediaType === "other" || fileType === "other";
+
+  if (isOtherBucket) {
+    where[Op.not] = {
+      [Op.or]: [
+        { media_type: "image" },
+        { file_type: { [Op.in]: [...IMAGE_FILE_TYPES, "pdf"] } },
+      ],
+    };
+  } else if (mediaType) {
+    if (mediaType === "image") {
+      where[Op.or] = [
+        { media_type: "image" },
+        { file_type: { [Op.in]: IMAGE_FILE_TYPES } },
+      ];
+    } else {
+      where.media_type = mediaType;
+    }
+  }
+
+  if (fileType && !isOtherBucket) {
+    if (fileType === "image") {
+      where[Op.or] = [
+        { media_type: "image" },
+        { file_type: { [Op.in]: IMAGE_FILE_TYPES } },
+      ];
+    } else {
+      where.file_type = fileType;
+    }
+  }
+
+  if (assetType) {
+    where.asset_type = { [Op.iLike]: `%${assetType}%` };
+  }
+
+  return where;
+}
+
+async function createDocument(data, options = {}) {
   const doc = await Document.create({
     title: data.title,
     description: data.description || null,
+    doc_id: data.doc_id != null && String(data.doc_id).trim() !== "" ? String(data.doc_id).trim() : null,
+    doc_key_poid:
+      data.doc_key_poid != null && String(data.doc_key_poid).trim() !== ""
+        ? String(data.doc_key_poid).trim()
+        : null,
     tags: data.tags || null,
     category_id: data.category_id || null,
     created_by: data.created_by,
     updated_by: data.updated_by || null,
     cover_image: data.cover_image || null,
     distribution: data.distribution != null && String(data.distribution).trim() !== "" ? String(data.distribution).trim() : null,
-  });
+    module_name: data.module_name != null && String(data.module_name).trim() !== "" ? String(data.module_name).trim() : null,
+    screen_name: data.screen_name != null && String(data.screen_name).trim() !== "" ? String(data.screen_name).trim() : null,
+    username: data.username != null && String(data.username).trim() !== "" ? String(data.username).trim() : null,
+  }, options);
   return doc.toJSON();
 }
 
-async function createDocumentFile(data) {
+async function createDocumentFile(data, options = {}) {
   const row = await DocumentFile.create({
     document_id: data.document_id,
     file_name: data.file_name,
@@ -76,23 +125,36 @@ async function createDocumentFile(data) {
       data.is_private === 1 ||
       data.is_private === "1" ||
       data.is_private === "true",
-  });
+  }, options);
   return row.toJSON();
 }
 
+async function getDocumentFileByFileId(fileId, options = {}) {
+  const row = await DocumentFile.findOne({
+    where: { file_id: fileId },
+    ...options,
+  });
+  return row ? row.toJSON() : null;
+}
+
 async function getById(id, options = {}) {
-  const include = [
-    { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name", "email"] },
-    { model: Category, as: "category", attributes: ["category_id", "name"] },
-  ];
-  if (options.includeFiles !== false) {
+  const includeFiles = options.includeFiles !== false;
+  const queryOptions = { ...options };
+  delete queryOptions.includeFiles;
+  const include = [{ model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] }];
+  if (includeFiles) {
     include.push({ model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS });
   }
   const doc = await Document.findByPk(id, {
+    ...queryOptions,
     include,
     attributes: { exclude: [] },
   });
   return doc ? doc.toJSON() : null;
+}
+
+async function runInTransaction(work) {
+  return Document.sequelize.transaction(async (transaction) => work(transaction));
 }
 
 async function list(filters = {}) {
@@ -102,8 +164,7 @@ async function list(filters = {}) {
   const { rows, count } = await Document.findAndCountAll({
     where,
     include: [
-      { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id", "description"] },
       { model: DocumentFile, as: "documentFiles", attributes: ["document_file_id", "file_name", "file_type", "media_type", "asset_type", "file_size"] },
     ],
     limit: Math.min(limit, 100),
@@ -132,15 +193,14 @@ async function getByAlfrescoIds(alfrescoIds, filters = {}) {
   if (!alfrescoIds || alfrescoIds.length === 0) return { rows: [], count: 0 };
   const where = { file_id: { [Op.in]: alfrescoIds } };
   const include = [
-    { model: Document, as: "document", include: [{ model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] }, { model: Category, as: "category", attributes: ["category_id", "name"] }] },
+    { model: Document, as: "document", include: [{ model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] }] },
   ];
   const files = await DocumentFile.findAll({ where, include });
   const docIds = [...new Set(files.map((f) => f.document_id))];
   const docs = await Document.findAll({
     where: { document_id: { [Op.in]: docIds } },
     include: [
-      { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
       { model: DocumentFile, as: "documentFiles", attributes: FILE_LIST_ATTRS },
     ],
   });
@@ -181,9 +241,13 @@ async function searchDocuments(filters = {}) {
     description,
     tags,
     distribution,
+    module_name,
+    screen_name,
     media_type,
+    file_type,
     asset_type,
     document_id_in,
+    doc_id_in,
   } = filters;
 
   const whereDoc = {};
@@ -192,6 +256,11 @@ async function searchDocuments(filters = {}) {
   if (document_id_in && document_id_in.length > 0) {
     whereDoc.document_id = { [Op.in]: document_id_in };
   } else if (document_id_in && document_id_in.length === 0) {
+    return { rows: [], count: 0 };
+  }
+  if (doc_id_in && doc_id_in.length > 0) {
+    whereDoc.doc_id = { [Op.in]: doc_id_in };
+  } else if (doc_id_in && doc_id_in.length === 0) {
     return { rows: [], count: 0 };
   }
 
@@ -203,13 +272,15 @@ async function searchDocuments(filters = {}) {
   addILike("description", description);
   addILike("tags", tags);
   addILike("distribution", distribution);
+  addILike("module_name", module_name);
+  addILike("screen_name", screen_name);
 
   const fileWhere = {};
   const mt = trimOrEmpty(media_type);
+  const ft = trimOrEmpty(file_type);
   const at = trimOrEmpty(asset_type);
-  if (mt) fileWhere.media_type = mt;
-  if (at) fileWhere.asset_type = { [Op.iLike]: `%${at}%` };
-  const hasFileFilter = Object.keys(fileWhere).length > 0;
+  Object.assign(fileWhere, buildFileFilter(mt, ft, at));
+  const hasFileFilter = Boolean(mt || ft || at);
 
   const fileInclude = {
     model: DocumentFile,
@@ -226,8 +297,7 @@ async function searchDocuments(filters = {}) {
     distinct: true,
     col: Document.primaryKeyAttribute || "document_id",
     include: [
-      { model: User, as: "creator", attributes: ["user_id", "first_name", "last_name"] },
-      { model: Category, as: "category", attributes: ["category_id", "name"] },
+      { model: Category, as: "category", attributes: ["category_id", "name", "doc_id"] },
       fileInclude,
     ],
     limit: perPage,
@@ -246,10 +316,37 @@ async function updateDocument(id, data) {
     category_id: data.category_id,
     updated_by: data.updated_by,
   };
+  if (data.doc_id !== undefined) {
+    patch.doc_id = data.doc_id != null && String(data.doc_id).trim() !== "" ? String(data.doc_id).trim() : null;
+  }
+  if (data.doc_key_poid !== undefined) {
+    patch.doc_key_poid =
+      data.doc_key_poid != null && String(data.doc_key_poid).trim() !== ""
+        ? String(data.doc_key_poid).trim()
+        : null;
+  }
   if (data.distribution !== undefined) {
     patch.distribution =
       data.distribution != null && String(data.distribution).trim() !== ""
         ? String(data.distribution).trim()
+        : null;
+  }
+  if (data.module_name !== undefined) {
+    patch.module_name =
+      data.module_name != null && String(data.module_name).trim() !== ""
+        ? String(data.module_name).trim()
+        : null;
+  }
+  if (data.screen_name !== undefined) {
+    patch.screen_name =
+      data.screen_name != null && String(data.screen_name).trim() !== ""
+        ? String(data.screen_name).trim()
+        : null;
+  }
+  if (data.username !== undefined) {
+    patch.username =
+      data.username != null && String(data.username).trim() !== ""
+        ? String(data.username).trim()
         : null;
   }
   await Document.update(patch, { where: { document_id: id } });
@@ -259,6 +356,14 @@ async function updateDocument(id, data) {
 async function getDocumentFilesByDocumentId(documentId) {
   const files = await DocumentFile.findAll({ where: { document_id: documentId } });
   return files.map((f) => f.toJSON());
+}
+
+async function deleteDocumentFilesByDocumentId(documentId, options = {}) {
+  await DocumentFile.destroy({
+    where: { document_id: documentId },
+    ...options,
+  });
+  return true;
 }
 
 async function deleteDocument(id) {
@@ -284,6 +389,7 @@ async function getFilesByDistributionAndTypeRaw() {
 module.exports = {
   createDocument,
   createDocumentFile,
+  getDocumentFileByFileId,
   getById,
   list,
   getDocumentFileById,
@@ -294,7 +400,9 @@ module.exports = {
   searchDocuments,
   updateDocument,
   getDocumentFilesByDocumentId,
+  deleteDocumentFilesByDocumentId,
   deleteDocument,
   getFileStatsSummaryRaw,
   getFilesByDistributionAndTypeRaw,
+  runInTransaction,
 };

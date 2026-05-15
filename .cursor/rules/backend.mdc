@@ -1,0 +1,36 @@
+---
+description: Node/Express API conventions for dms-api (routes, services, data layer)
+globs: "**/{routes,services,dao,models,middleware,common,config}/**/*.js"
+alwaysApply: false
+---
+
+# Backend (dms-api)
+
+## Layout
+
+- **Routes** (`routes/`): HTTP only — parse input, call services, map status codes and JSON via `Util`.
+- **Services** (`services/`): orchestration and business rules; call `dao/` and external clients (`common/`).
+- **DAO** (`dao/`): Sequelize queries and raw SQL; no Express `req`/`res`.
+
+## Requests and responses
+
+- Validate required body/query params with `Util.validate_prams` (or equivalent) before work; return **422** with `Util.getErrorResponse` when validation fails.
+- Prefer **400** for client/business errors and **404** when a resource is missing; avoid leaking stack traces in JSON responses.
+
+## Data and consistency
+
+- Use a **Sequelize transaction** when multiple rows/tables must succeed or fail together (for example: create parent row then child rows). Pass `{ transaction }` into every `create`/`update`/`destroy` in that unit of work.
+- If an external step runs before the DB commit (for example file upload to Alfresco), plan **compensation** on failure (delete uploaded nodes, roll back the transaction) so you do not leave orphan DB rows or orphan files.
+
+```javascript
+// Pattern: transaction + pass-through options
+await sequelize.transaction(async (transaction) => {
+  const parent = await Parent.create(data, { transaction });
+  await Child.create({ ...childData, parent_id: parent.id }, { transaction });
+});
+```
+
+## Style
+
+- Match existing code: **CommonJS** (`require` / `module.exports`), same naming and error-handling style as neighboring files.
+- Keep diffs **minimal**: change only what the task needs; no drive-by refactors or unrelated files.

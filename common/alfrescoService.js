@@ -44,7 +44,13 @@ async function uploadFile(file, metadata = {}) {
     console.log(response);
     return response.data.entry;
   } catch (error) {
-    console.log(error);
+    const message =
+      error?.response?.data?.error?.briefSummary ||
+      error?.response?.data?.error?.errorKey ||
+      error?.response?.data?.message ||
+      error?.message ||
+      "Alfresco upload failed";
+    throw new Error(message);
   }
 }
 
