@@ -1,5 +1,6 @@
 require("dotenv").config();
 require("./models"); // set Document-Category association
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
@@ -16,8 +17,29 @@ const categoryTypeMasterRoutes = require("./routes/categoryTypeMasterRoutes");
 const userRoutes = require("./routes/userRoutes");
 
 const app = express();
-// app.use(cors());
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true })); 
+
+const allowedOrigins = [
+  process.env.CLIENT_DEV_URL,
+  process.env.CLIENT_QA_URL,
+  process.env.CLIENT_UAT_URL
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (Postman, curl, etc.)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
+
 app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
 app.use(bodyParser.json({ limit: "50mb" }));
 
