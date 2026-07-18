@@ -4,3 +4,6 @@ uploads/
 
 /generated/prisma
 config.bat
+
+.env
+.env.production
