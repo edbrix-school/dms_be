@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const documentService = require("../services/documentService");
-const { verifyAuth } = require("../middleware/auth");
+const { verifyAuth, getTokenFromHeader } = require("../middleware/auth");
 const Util = require("../common/Util");
 const { convertEmlBufferToHtml } = require("../common/emlPreview");
 
@@ -44,6 +44,22 @@ function getResponseContentType(result) {
   return contentTypes[extension] || "application/octet-stream";
 }
 
+// Auth context forwarded to the service so it can call the Menu API on the
+// caller's behalf to resolve per-document permissions.
+function buildAuthContext(req) {
+  const user = req.user || {};
+  return {
+    user,
+    token: getTokenFromHeader(req),
+    companyPoid:
+      req.headers["x-company-poid"] ||
+      user.companyPoid ||
+      user.company_poid ||
+      user.companyId ||
+      null,
+  };
+}
+
 router.post(
   "/",
   verifyAuth,
@@ -73,7 +89,7 @@ router.get("/", verifyAuth, async (req, res) => {
       sort: req.query.sort || "created_at",
       order: req.query.order || "DESC",
     };
-    const result = await documentService.listDocuments(filters, req.user);
+    const result = await documentService.listDocuments(filters, buildAuthContext(req));
     return res.status(200).json(Util.getSuccessResponse(result));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
@@ -98,9 +114,27 @@ router.get("/stats/by-distribution", verifyAuth, async (req, res) => {
   }
 });
 
+router.get("/stats/by-category", verifyAuth, async (req, res) => {
+  try {
+    const data = await documentService.getFilesByCategory();
+    return res.status(200).json(Util.getSuccessResponse(data));
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/stats/by-user", verifyAuth, async (req, res) => {
+  try {
+    const data = await documentService.getFilesByUser();
+    return res.status(200).json(Util.getSuccessResponse(data));
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 router.post("/search", verifyAuth, async (req, res) => {
   try {
-    const result = await documentService.searchDocuments(req.body, req.user);
+    const result = await documentService.searchDocuments(req.body, buildAuthContext(req));
     return res.status(200).json(Util.getSuccessResponse(result));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });

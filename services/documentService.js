@@ -1,7 +1,25 @@
 const fs = require("fs").promises;
 const documentRepository = require("../dao/documentRepository");
 const alfrescoService = require("../common/alfrescoService");
+const menuService = require("../common/menuService");
 const { inferMediaType } = require("../common/fileMediaType");
+
+/**
+ * Resolve the list of menuIds (== document doc_ids) the caller may access by
+ * calling the same Menu API the frontend uses. `ctx` carries the auth context
+ * built from the incoming request: { user, token, companyPoid }.
+ * @returns {Promise<string[]>} accessible doc_ids
+ */
+async function resolvePermittedDocIds(ctx = {}) {
+  const user = ctx.user || {};
+  const userPoid = user.userPoid ?? user.user_id ?? user.sub;
+  const menuIds = await menuService.getAccessibleMenuIds({
+    userPoid,
+    token: ctx.token,
+    companyPoid: ctx.companyPoid,
+  });
+  return [...menuIds];
+}
 
 function resolveUsername(user) {
   if (!user) return null;
@@ -147,8 +165,16 @@ async function createDocument(req, body, userId) {
   return createdDocumentId ? documentRepository.getById(createdDocumentId) : null;
 }
 
-async function listDocuments(filters, user) {
-  return documentRepository.list(filters);
+async function listDocuments(filters, ctx = {}) {
+  let allowedDocIds;
+  try {
+    allowedDocIds = await resolvePermittedDocIds(ctx);
+  } catch (err) {
+    // Fail closed: if permissions cannot be verified, expose no documents.
+    console.error("Document list permission check failed; returning no documents:", err.message);
+    return { rows: [], count: 0 };
+  }
+  return documentRepository.list({ ...filters, allowedDocIds });
 }
 
 async function getDocumentById(id) {
@@ -203,7 +229,16 @@ function hasAnyDbSearchCriterion(f) {
   );
 }
 
-async function searchDocuments(body, user) {
+async function searchDocuments(body, ctx = {}) {
+  let allowedDocIds;
+  try {
+    allowedDocIds = await resolvePermittedDocIds(ctx);
+  } catch (err) {
+    // Fail closed: if permissions cannot be verified, expose no documents.
+    console.error("Document search permission check failed; returning no documents:", err.message);
+    return { rows: [], count: 0 };
+  }
+
   const f = mergeSearchFields(body);
   const docIdIn = parseDocIdFilters(f.doc_id, f.doc_ids);
   const effectiveDocIdIn = docIdIn.length > 0 ? docIdIn : null;
@@ -216,6 +251,7 @@ async function searchDocuments(body, user) {
       page: f.page || 1,
       limit: f.limit || 20,
       category_id: f.category_id,
+      allowedDocIds,
     });
   }
 
@@ -244,6 +280,7 @@ async function searchDocuments(body, user) {
     asset_type: f.asset_type,
     doc_id_in: effectiveDocIdIn,
     document_id_in: documentIdIn,
+    allowedDocIds,
   });
 }
 
@@ -408,6 +445,26 @@ async function getFilesByDistributionAndType() {
   });
 }
 
+function mapStorageBreakdownRow(r) {
+  const bytes = parseBytes(r.total_bytes);
+  return {
+    label: r.label,
+    file_count: Number(r.file_count) || 0,
+    total_size_bytes: String(bytes),
+    total_size_gb: bytesToGb(bytes),
+  };
+}
+
+async function getFilesByCategory() {
+  const rows = await documentRepository.getFilesByCategoryRaw();
+  return rows.map(mapStorageBreakdownRow);
+}
+
+async function getFilesByUser() {
+  const rows = await documentRepository.getFilesByUserRaw();
+  return rows.map(mapStorageBreakdownRow);
+}
+
 module.exports = {
   createDocument,
   listDocuments,
@@ -418,4 +475,6 @@ module.exports = {
   deleteDocument,
   getFileStatsSummary,
   getFilesByDistributionAndType,
+  getFilesByCategory,
+  getFilesByUser,
 };

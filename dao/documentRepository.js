@@ -34,6 +34,35 @@ GROUP BY 1, 2
 ORDER BY distribution ASC, media_type ASC
 `;
 
+const FILES_BY_CATEGORY_SQL = `
+SELECT
+  COALESCE(NULLIF(TRIM(c.name), ''), 'Unassigned') AS label,
+  COUNT(df.document_file_id)::int AS file_count,
+  COALESCE(SUM(df.file_size), 0)::text AS total_bytes
+FROM dms_document_files df
+INNER JOIN dms_documents d ON d.document_id = df.document_id
+LEFT JOIN dms_categories c ON c.category_id = d.category_id
+GROUP BY 1
+ORDER BY file_count DESC, label ASC
+`;
+
+const FILES_BY_USER_SQL = `
+SELECT
+  COALESCE(
+    NULLIF(TRIM(d.username), ''),
+    NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''),
+    NULLIF(TRIM(u.email), ''),
+    'Unknown User'
+  ) AS label,
+  COUNT(df.document_file_id)::int AS file_count,
+  COALESCE(SUM(df.file_size), 0)::text AS total_bytes
+FROM dms_document_files df
+INNER JOIN dms_documents d ON d.document_id = df.document_id
+LEFT JOIN dms_users u ON u.user_id = d.created_by
+GROUP BY 1
+ORDER BY file_count DESC, label ASC
+`;
+
 const FILE_LIST_ATTRS = [
   "document_file_id",
   "document_id",
@@ -47,6 +76,21 @@ const FILE_LIST_ATTRS = [
 ];
 
 const IMAGE_FILE_TYPES = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "heic", "ico"];
+
+/**
+ * Build the per-document permission constraint used by the list/search queries.
+ * `allowedDocIds` is the set of menuIds the current user may access (from the
+ * Menu API). Documents with no doc_id are treated as unrestricted and always
+ * included. Returns null when no permission filtering should be applied.
+ */
+function buildPermissionClause(allowedDocIds) {
+  if (!Array.isArray(allowedDocIds)) return null;
+  const ors = [{ doc_id: null }, { doc_id: "" }];
+  if (allowedDocIds.length > 0) {
+    ors.push({ doc_id: { [Op.in]: allowedDocIds } });
+  }
+  return { [Op.or]: ors };
+}
 
 function buildFileFilter(mediaType, fileType, assetType) {
   const where = {};
@@ -158,9 +202,13 @@ async function runInTransaction(work) {
 }
 
 async function list(filters = {}) {
-  const { page = 1, limit = 20, category_id, sort = "created_at", order = "DESC" } = filters;
+  const { page = 1, limit = 20, category_id, sort = "created_at", order = "DESC", allowedDocIds } = filters;
   const where = {};
   if (category_id != null) where.category_id = category_id;
+  const permissionClause = buildPermissionClause(allowedDocIds);
+  if (permissionClause) {
+    where[Op.and] = [...(where[Op.and] || []), permissionClause];
+  }
   const { rows, count } = await Document.findAndCountAll({
     where,
     include: [
@@ -248,6 +296,7 @@ async function searchDocuments(filters = {}) {
     asset_type,
     document_id_in,
     doc_id_in,
+    allowedDocIds,
   } = filters;
 
   const whereDoc = {};
@@ -274,6 +323,11 @@ async function searchDocuments(filters = {}) {
   addILike("distribution", distribution);
   addILike("module_name", module_name);
   addILike("screen_name", screen_name);
+
+  const permissionClause = buildPermissionClause(allowedDocIds);
+  if (permissionClause) {
+    whereDoc[Op.and] = [...(whereDoc[Op.and] || []), permissionClause];
+  }
 
   const fileWhere = {};
   const mt = trimOrEmpty(media_type);
@@ -386,6 +440,16 @@ async function getFilesByDistributionAndTypeRaw() {
   return sequelize.query(FILES_BY_DISTRIBUTION_TYPE_SQL, { type: QueryTypes.SELECT });
 }
 
+async function getFilesByCategoryRaw() {
+  const sequelize = Document.sequelize;
+  return sequelize.query(FILES_BY_CATEGORY_SQL, { type: QueryTypes.SELECT });
+}
+
+async function getFilesByUserRaw() {
+  const sequelize = Document.sequelize;
+  return sequelize.query(FILES_BY_USER_SQL, { type: QueryTypes.SELECT });
+}
+
 module.exports = {
   createDocument,
   createDocumentFile,
@@ -404,5 +468,7 @@ module.exports = {
   deleteDocument,
   getFileStatsSummaryRaw,
   getFilesByDistributionAndTypeRaw,
+  getFilesByCategoryRaw,
+  getFilesByUserRaw,
   runInTransaction,
 };
