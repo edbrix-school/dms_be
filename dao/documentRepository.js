@@ -4,25 +4,57 @@ const DocumentFile = require("../models/documentFile");
 const Category = require("../models/category");
 
 const IS_IMAGE_SQL = `(
-  media_type = 'image'
-  OR LOWER(TRIM(COALESCE(file_type, ''))) IN ('jpg','jpeg','png','gif','webp','svg','bmp','heic','ico')
+  df.media_type = 'image'
+  OR LOWER(TRIM(COALESCE(df.file_type, ''))) IN ('jpg','jpeg','png','gif','webp','svg','bmp','heic','ico')
 )`;
-const IS_PDF_SQL = `LOWER(TRIM(COALESCE(file_type, ''))) = 'pdf'`;
+const IS_PDF_SQL = `LOWER(TRIM(COALESCE(df.file_type, ''))) = 'pdf'`;
 
-const FILE_STATS_SUMMARY_SQL = `
+/**
+ * SQL counterpart of buildPermissionClause(): restricts stats aggregations to
+ * documents the user may access. Documents with no doc_id are unrestricted.
+ * Returns an empty clause when no permission filtering should be applied.
+ */
+function buildDocPermissionSql(allowedDocIds, alias = "d") {
+  if (!Array.isArray(allowedDocIds)) return { clause: "", replacements: {} };
+  const unrestricted = `(${alias}.doc_id IS NULL OR TRIM(${alias}.doc_id) = '')`;
+  if (allowedDocIds.length === 0) {
+    return { clause: unrestricted, replacements: {} };
+  }
+  return {
+    clause: `(${alias}.doc_id IS NULL OR TRIM(${alias}.doc_id) = '' OR ${alias}.doc_id IN (:allowedDocIds))`,
+    replacements: { allowedDocIds },
+  };
+}
+
+function whereOrEmpty(clause) {
+  return clause ? `WHERE ${clause}` : "";
+}
+
+function buildFileStatsSummarySql(allowedDocIds) {
+  const { clause, replacements } = buildDocPermissionSql(allowedDocIds);
+  return {
+    sql: `
 SELECT
   COUNT(*)::int AS total_count,
-  COALESCE(SUM(file_size), 0)::text AS total_bytes,
+  COALESCE(SUM(df.file_size), 0)::text AS total_bytes,
   COUNT(*) FILTER (WHERE ${IS_IMAGE_SQL})::int AS image_count,
-  COALESCE(SUM(file_size) FILTER (WHERE ${IS_IMAGE_SQL}), 0)::text AS image_bytes,
+  COALESCE(SUM(df.file_size) FILTER (WHERE ${IS_IMAGE_SQL}), 0)::text AS image_bytes,
   COUNT(*) FILTER (WHERE ${IS_PDF_SQL})::int AS pdf_count,
-  COALESCE(SUM(file_size) FILTER (WHERE ${IS_PDF_SQL}), 0)::text AS pdf_bytes,
+  COALESCE(SUM(df.file_size) FILTER (WHERE ${IS_PDF_SQL}), 0)::text AS pdf_bytes,
   COUNT(*) FILTER (WHERE NOT (${IS_IMAGE_SQL}) AND NOT (${IS_PDF_SQL}))::int AS other_count,
-  COALESCE(SUM(file_size) FILTER (WHERE NOT (${IS_IMAGE_SQL}) AND NOT (${IS_PDF_SQL})), 0)::text AS other_bytes
-FROM dms_document_files
-`;
+  COALESCE(SUM(df.file_size) FILTER (WHERE NOT (${IS_IMAGE_SQL}) AND NOT (${IS_PDF_SQL})), 0)::text AS other_bytes
+FROM dms_document_files df
+INNER JOIN dms_documents d ON d.document_id = df.document_id
+${whereOrEmpty(clause)}
+`,
+    replacements,
+  };
+}
 
-const FILES_BY_DISTRIBUTION_TYPE_SQL = `
+function buildFilesByDistributionTypeSql(allowedDocIds) {
+  const { clause, replacements } = buildDocPermissionSql(allowedDocIds);
+  return {
+    sql: `
 SELECT
   COALESCE(NULLIF(TRIM(d.distribution), ''), '(Unassigned)') AS distribution,
   COALESCE(NULLIF(TRIM(df.media_type), ''), 'unknown') AS media_type,
@@ -30,11 +62,18 @@ SELECT
   COALESCE(SUM(df.file_size), 0)::text AS total_bytes
 FROM dms_document_files df
 INNER JOIN dms_documents d ON d.document_id = df.document_id
+${whereOrEmpty(clause)}
 GROUP BY 1, 2
 ORDER BY distribution ASC, media_type ASC
-`;
+`,
+    replacements,
+  };
+}
 
-const FILES_BY_CATEGORY_SQL = `
+function buildFilesByCategorySql(allowedDocIds) {
+  const { clause, replacements } = buildDocPermissionSql(allowedDocIds);
+  return {
+    sql: `
 SELECT
   COALESCE(NULLIF(TRIM(c.name), ''), 'Unassigned') AS label,
   COUNT(df.document_file_id)::int AS file_count,
@@ -42,11 +81,18 @@ SELECT
 FROM dms_document_files df
 INNER JOIN dms_documents d ON d.document_id = df.document_id
 LEFT JOIN dms_categories c ON c.category_id = d.category_id
+${whereOrEmpty(clause)}
 GROUP BY 1
 ORDER BY file_count DESC, label ASC
-`;
+`,
+    replacements,
+  };
+}
 
-const FILES_BY_USER_SQL = `
+function buildFilesByUserSql(allowedDocIds) {
+  const { clause, replacements } = buildDocPermissionSql(allowedDocIds);
+  return {
+    sql: `
 SELECT
   COALESCE(
     NULLIF(TRIM(d.username), ''),
@@ -59,9 +105,13 @@ SELECT
 FROM dms_document_files df
 INNER JOIN dms_documents d ON d.document_id = df.document_id
 LEFT JOIN dms_users u ON u.user_id = d.created_by
+${whereOrEmpty(clause)}
 GROUP BY 1
 ORDER BY file_count DESC, label ASC
-`;
+`,
+    replacements,
+  };
+}
 
 const FILE_LIST_ATTRS = [
   "document_file_id",
@@ -429,25 +479,29 @@ async function deleteDocument(id) {
   return true;
 }
 
-async function getFileStatsSummaryRaw() {
+async function getFileStatsSummaryRaw(allowedDocIds) {
   const sequelize = Document.sequelize;
-  const [row] = await sequelize.query(FILE_STATS_SUMMARY_SQL, { type: QueryTypes.SELECT });
+  const { sql, replacements } = buildFileStatsSummarySql(allowedDocIds);
+  const [row] = await sequelize.query(sql, { type: QueryTypes.SELECT, replacements });
   return row || {};
 }
 
-async function getFilesByDistributionAndTypeRaw() {
+async function getFilesByDistributionAndTypeRaw(allowedDocIds) {
   const sequelize = Document.sequelize;
-  return sequelize.query(FILES_BY_DISTRIBUTION_TYPE_SQL, { type: QueryTypes.SELECT });
+  const { sql, replacements } = buildFilesByDistributionTypeSql(allowedDocIds);
+  return sequelize.query(sql, { type: QueryTypes.SELECT, replacements });
 }
 
-async function getFilesByCategoryRaw() {
+async function getFilesByCategoryRaw(allowedDocIds) {
   const sequelize = Document.sequelize;
-  return sequelize.query(FILES_BY_CATEGORY_SQL, { type: QueryTypes.SELECT });
+  const { sql, replacements } = buildFilesByCategorySql(allowedDocIds);
+  return sequelize.query(sql, { type: QueryTypes.SELECT, replacements });
 }
 
-async function getFilesByUserRaw() {
+async function getFilesByUserRaw(allowedDocIds) {
   const sequelize = Document.sequelize;
-  return sequelize.query(FILES_BY_USER_SQL, { type: QueryTypes.SELECT });
+  const { sql, replacements } = buildFilesByUserSql(allowedDocIds);
+  return sequelize.query(sql, { type: QueryTypes.SELECT, replacements });
 }
 
 module.exports = {

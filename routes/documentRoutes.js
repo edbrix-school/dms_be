@@ -98,7 +98,7 @@ router.get("/", verifyAuth, async (req, res) => {
 
 router.get("/stats/summary", verifyAuth, async (req, res) => {
   try {
-    const data = await documentService.getFileStatsSummary();
+    const data = await documentService.getFileStatsSummary(buildAuthContext(req));
     return res.status(200).json(Util.getSuccessResponse(data));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
@@ -107,7 +107,7 @@ router.get("/stats/summary", verifyAuth, async (req, res) => {
 
 router.get("/stats/by-distribution", verifyAuth, async (req, res) => {
   try {
-    const data = await documentService.getFilesByDistributionAndType();
+    const data = await documentService.getFilesByDistributionAndType(buildAuthContext(req));
     return res.status(200).json(Util.getSuccessResponse(data));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
@@ -116,7 +116,7 @@ router.get("/stats/by-distribution", verifyAuth, async (req, res) => {
 
 router.get("/stats/by-category", verifyAuth, async (req, res) => {
   try {
-    const data = await documentService.getFilesByCategory();
+    const data = await documentService.getFilesByCategory(buildAuthContext(req));
     return res.status(200).json(Util.getSuccessResponse(data));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
@@ -125,7 +125,7 @@ router.get("/stats/by-category", verifyAuth, async (req, res) => {
 
 router.get("/stats/by-user", verifyAuth, async (req, res) => {
   try {
-    const data = await documentService.getFilesByUser();
+    const data = await documentService.getFilesByUser(buildAuthContext(req));
     return res.status(200).json(Util.getSuccessResponse(data));
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
