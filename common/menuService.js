@@ -1,3 +1,4 @@
+const https = require("https");
 const axios = require("axios");
 require("dotenv").config();
 
@@ -5,6 +6,18 @@ require("dotenv").config();
 const AUTH_API_URL = process.env.AUTH_API_URL || "http://10.100.200.123:8080";
 const MENU_ENDPOINT = "/api/v1/auth/menu";
 const MENU_TIMEOUT_MS = Number(process.env.AUTH_API_TIMEOUT_MS) || 15000;
+
+// HTTPS agent configuration to support internal/custom/self-signed SSL certificates.
+// Defaults to false (bypassing SSL cert errors for HTTPS endpoints).
+// Set AUTH_API_REJECT_UNAUTHORIZED=true in .env to enforce strict SSL verification.
+const rejectUnauthorized =
+  process.env.AUTH_API_REJECT_UNAUTHORIZED != null
+    ? process.env.AUTH_API_REJECT_UNAUTHORIZED === "true"
+    : false;
+
+const httpsAgent = new https.Agent({
+  rejectUnauthorized,
+});
 
 // A single page load hits several permission-aware endpoints (list, summary,
 // distribution, recent files). Cache the resolved menuIds briefly so we make
@@ -93,6 +106,7 @@ async function getAccessibleMenuIds({ userPoid, token, companyPoid } = {}) {
     params: { userPoid },
     headers,
     timeout: MENU_TIMEOUT_MS,
+    httpsAgent,
   });
 
   const body = response.data || {};
