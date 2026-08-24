@@ -1,6 +1,3 @@
-const https = require("https");
-const http = require("http");
-const dns = require("dns");
 const axios = require("axios");
 require("dotenv").config();
 
@@ -8,37 +5,6 @@ require("dotenv").config();
 const AUTH_API_URL = process.env.AUTH_API_URL || "http://10.100.200.123:8080";
 const MENU_ENDPOINT = "/api/v1/auth/menu";
 const MENU_TIMEOUT_MS = Number(process.env.AUTH_API_TIMEOUT_MS) || 15000;
-
-// HTTPS agent configuration to support internal/custom/self-signed SSL certificates.
-// Defaults to false (bypassing SSL cert errors for HTTPS endpoints).
-// Set AUTH_API_REJECT_UNAUTHORIZED=true in .env to enforce strict SSL verification.
-const rejectUnauthorized =
-  process.env.AUTH_API_REJECT_UNAUTHORIZED != null
-    ? process.env.AUTH_API_REJECT_UNAUTHORIZED === "true"
-    : false;
-
-// Custom DNS lookup to force IPv4 first (prevents 'getaddrinfo ENOTFOUND' on dual-stack/IPv6 network lookup failures)
-function customLookup(hostname, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
-  dns.lookup(hostname, Object.assign({}, options, { family: 4 }), (err, address, family) => {
-    if (!err) return callback(null, address, family);
-    dns.lookup(hostname, options, callback);
-  });
-}
-
-const httpsAgent = new https.Agent({
-  rejectUnauthorized,
-  lookup: customLookup,
-  family: 4,
-});
-
-const httpAgent = new http.Agent({
-  lookup: customLookup,
-  family: 4,
-});
 
 // A single page load hits several permission-aware endpoints (list, summary,
 // distribution, recent files). Cache the resolved menuIds briefly so we make
@@ -127,8 +93,6 @@ async function getAccessibleMenuIds({ userPoid, token, companyPoid } = {}) {
     params: { userPoid },
     headers,
     timeout: MENU_TIMEOUT_MS,
-    httpsAgent,
-    httpAgent,
   });
 
   const body = response.data || {};

@@ -166,14 +166,7 @@ async function createDocument(req, body, userId) {
 }
 
 async function listDocuments(filters, ctx = {}) {
-  let allowedDocIds;
-  try {
-    allowedDocIds = await resolvePermittedDocIds(ctx);
-  } catch (err) {
-    // Fail closed: if permissions cannot be verified, expose no documents.
-    console.error("Document list permission check failed; returning no documents:", err.message);
-    return { rows: [], count: 0 };
-  }
+  const allowedDocIds = await resolvePermittedDocIds(ctx);
   return documentRepository.list({ ...filters, allowedDocIds });
 }
 
@@ -230,14 +223,7 @@ function hasAnyDbSearchCriterion(f) {
 }
 
 async function searchDocuments(body, ctx = {}) {
-  let allowedDocIds;
-  try {
-    allowedDocIds = await resolvePermittedDocIds(ctx);
-  } catch (err) {
-    // Fail closed: if permissions cannot be verified, expose no documents.
-    console.error("Document search permission check failed; returning no documents:", err.message);
-    return { rows: [], count: 0 };
-  }
+  const allowedDocIds = await resolvePermittedDocIds(ctx);
 
   const f = mergeSearchFields(body);
   const docIdIn = parseDocIdFilters(f.doc_id, f.doc_ids);
@@ -426,19 +412,7 @@ function emptyStatBucket() {
 }
 
 async function getFileStatsSummary(ctx = {}) {
-  let allowedDocIds;
-  try {
-    allowedDocIds = await resolvePermittedDocIds(ctx);
-  } catch (err) {
-    // Fail closed: if permissions cannot be verified, report nothing.
-    console.error("Stats summary permission check failed; returning empty stats:", err.message);
-    return {
-      total_assets: emptyStatBucket(),
-      images: emptyStatBucket(),
-      pdfs: emptyStatBucket(),
-      other_files: emptyStatBucket(),
-    };
-  }
+  const allowedDocIds = await resolvePermittedDocIds(ctx);
   const row = await documentRepository.getFileStatsSummaryRaw(allowedDocIds);
   return {
     total_assets: statBucket(row, "total_count", "total_bytes"),
@@ -449,13 +423,7 @@ async function getFileStatsSummary(ctx = {}) {
 }
 
 async function getFilesByDistributionAndType(ctx = {}) {
-  let allowedDocIds;
-  try {
-    allowedDocIds = await resolvePermittedDocIds(ctx);
-  } catch (err) {
-    console.error("Distribution permission check failed; returning no rows:", err.message);
-    return [];
-  }
+  const allowedDocIds = await resolvePermittedDocIds(ctx);
   const rows = await documentRepository.getFilesByDistributionAndTypeRaw(allowedDocIds);
   return rows.map((r) => {
     const bytes = parseBytes(r.total_bytes);
@@ -480,25 +448,13 @@ function mapStorageBreakdownRow(r) {
 }
 
 async function getFilesByCategory(ctx = {}) {
-  let allowedDocIds;
-  try {
-    allowedDocIds = await resolvePermittedDocIds(ctx);
-  } catch (err) {
-    console.error("Category distribution permission check failed; returning no rows:", err.message);
-    return [];
-  }
+  const allowedDocIds = await resolvePermittedDocIds(ctx);
   const rows = await documentRepository.getFilesByCategoryRaw(allowedDocIds);
   return rows.map(mapStorageBreakdownRow);
 }
 
 async function getFilesByUser(ctx = {}) {
-  let allowedDocIds;
-  try {
-    allowedDocIds = await resolvePermittedDocIds(ctx);
-  } catch (err) {
-    console.error("User distribution permission check failed; returning no rows:", err.message);
-    return [];
-  }
+  const allowedDocIds = await resolvePermittedDocIds(ctx);
   const rows = await documentRepository.getFilesByUserRaw(allowedDocIds);
   return rows.map(mapStorageBreakdownRow);
 }
