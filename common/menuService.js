@@ -1,4 +1,6 @@
 const https = require("https");
+const http = require("http");
+const dns = require("dns");
 const axios = require("axios");
 require("dotenv").config();
 
@@ -15,8 +17,27 @@ const rejectUnauthorized =
     ? process.env.AUTH_API_REJECT_UNAUTHORIZED === "true"
     : false;
 
+// Custom DNS lookup to force IPv4 first (prevents 'getaddrinfo ENOTFOUND' on dual-stack/IPv6 network lookup failures)
+function customLookup(hostname, options, callback) {
+  if (typeof options === "function") {
+    callback = options;
+    options = {};
+  }
+  dns.lookup(hostname, Object.assign({}, options, { family: 4 }), (err, address, family) => {
+    if (!err) return callback(null, address, family);
+    dns.lookup(hostname, options, callback);
+  });
+}
+
 const httpsAgent = new https.Agent({
   rejectUnauthorized,
+  lookup: customLookup,
+  family: 4,
+});
+
+const httpAgent = new http.Agent({
+  lookup: customLookup,
+  family: 4,
 });
 
 // A single page load hits several permission-aware endpoints (list, summary,
@@ -107,6 +128,7 @@ async function getAccessibleMenuIds({ userPoid, token, companyPoid } = {}) {
     headers,
     timeout: MENU_TIMEOUT_MS,
     httpsAgent,
+    httpAgent,
   });
 
   const body = response.data || {};
